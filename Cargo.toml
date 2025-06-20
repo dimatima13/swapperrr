@@ -1,0 +1,106 @@
+[package]
+name = "raydium-multipool-swap"
+version = "0.1.0"
+edition = "2021"
+authors = ["Raydium Multi-Pool Dev"]
+description = "Professional multi-pool DeFi tool for Raydium protocol"
+license = "MIT"
+
+[dependencies]
+# Solana SDK
+solana-sdk = "1.18"
+solana-client = "1.18"
+solana-transaction-status = "1.18"
+solana-account-decoder = "1.18"
+
+# Anchor Framework
+anchor-lang = "0.30"
+anchor-client = "0.30"
+anchor-spl = "0.30"
+
+# SPL Tokens
+spl-token = "4.0"
+spl-associated-token-account = "3.0"
+spl-token-2022 = "3.0"
+
+# Async Runtime
+tokio = { version = "1.40", features = ["full"] }
+futures = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+borsh = "1.5"
+bincode = "1.3"
+
+# CLI
+clap = { version = "4.5", features = ["derive", "env"] }
+dialoguer = "0.11"
+indicatif = "0.17"
+console = "0.15"
+colored = "2.1"
+
+# Utils
+anyhow = "1.0"
+thiserror = "1.0"
+log = "0.4"
+env_logger = "0.11"
+dotenv = "0.15"
+
+# Math
+rust_decimal = { version = "1.36", features = ["maths"] }
+num-bigint = "0.4"
+num-traits = "0.2"
+uint = "0.10"
+
+# Caching
+cached = { version = "0.53", features = ["async"] }
+dashmap = "6.0"
+lru = "0.12"
+
+# HTTP Client
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+
+# Time
+chrono = "0.4"
+
+# Base64
+base64 = "0.22"
+bs58 = "0.5"
+
+# Crypto
+sha2 = "0.10"
+
+# Additional dependencies
+async-trait = "0.1"
+lazy_static = "1.5"
+
+[dev-dependencies]
+# Testing
+mockito = "1.5"
+proptest = "1.5"
+criterion = { version = "0.5", features = ["html_reports"] }
+test-case = "3.3"
+pretty_assertions = "1.4"
+
+# Async testing
+tokio-test = "0.4"
+
+[[bench]]
+name = "pool_discovery"
+harness = false
+
+[[bench]]
+name = "quote_calculations"
+harness = false
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+
+[profile.dev]
+opt-level = 0
+
+[profile.test]
+opt-level = 2
