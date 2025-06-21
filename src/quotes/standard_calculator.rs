@@ -164,6 +164,7 @@ impl Default for StandardQuoteCalculator {
 mod tests {
     use super::*;
     use crate::core::{PoolType, TokenInfo};
+    use crate::quotes::QuoteCalculator;
     use solana_sdk::pubkey::Pubkey;
 
     fn create_test_standard_pool(reserve_a: u64, reserve_b: u64) -> PoolInfo {

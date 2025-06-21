@@ -1,5 +1,5 @@
 [package]
-name = "raydium-multipool-swap"
+name = "swapperrr"
 version = "0.1.0"
 edition = "2021"
 authors = ["Raydium Multi-Pool Dev"]
@@ -35,7 +35,7 @@ bincode = "1.3"
 
 # CLI
 clap = { version = "4.5", features = ["derive", "env"] }
-dialoguer = "0.11"
+dialoguer = "0.10"
 indicatif = "0.17"
 console = "0.15"
 colored = "2.1"
@@ -59,7 +59,7 @@ dashmap = "6.0"
 lru = "0.12"
 
 # HTTP Client
-reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
 
 # Time
 chrono = "0.4"
@@ -86,13 +86,14 @@ pretty_assertions = "1.4"
 # Async testing
 tokio-test = "0.4"
 
-[[bench]]
-name = "pool_discovery"
-harness = false
-
-[[bench]]
-name = "quote_calculations"
-harness = false
+# Benchmarks commented out until implemented
+# [[bench]]
+# name = "pool_discovery"
+# harness = false
+# 
+# [[bench]]
+# name = "quote_calculations"
+# harness = false
 
 [profile.release]
 opt-level = 3

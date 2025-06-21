@@ -5,6 +5,7 @@ use crate::quotes::QuoteEngine;
 use crate::selection::PoolSelector;
 use crate::transaction::TransactionExecutor;
 use colored::*;
+use console::style;
 use dialoguer::{theme::ColorfulTheme, Confirm, Password};
 use log::info;
 use solana_sdk::{
@@ -141,11 +142,10 @@ pub async fn execute(args: SwapArgs) -> SwapResult<()> {
             
             println!(
                 "\n{}",
-                format!(
+                style(format!(
                     "View on Solscan: https://solscan.io/tx/{}",
                     result.signature
-                )
-                .dim()
+                )).dim()
             );
         }
         Err(e) => {

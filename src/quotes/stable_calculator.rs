@@ -244,6 +244,7 @@ impl Default for StableQuoteCalculator {
 mod tests {
     use super::*;
     use crate::core::{PoolType, TokenInfo};
+    use crate::quotes::QuoteCalculator;
     use solana_sdk::pubkey::Pubkey;
 
     fn create_test_stable_pool(reserves: Vec<u64>, amp_factor: u64) -> PoolInfo {

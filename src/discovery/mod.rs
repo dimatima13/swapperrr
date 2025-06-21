@@ -1,6 +1,12 @@
+pub mod amm_pool_parser;
+pub mod stable_pool_parser;
+pub mod clmm_pool_parser;
 pub mod pool_cache;
 pub mod pool_finder;
 pub mod pool_scorer;
+
+#[cfg(test)]
+mod tests;
 
 use crate::core::{Config, PoolInfo, PoolType, SwapResult};
 use solana_sdk::pubkey::Pubkey;

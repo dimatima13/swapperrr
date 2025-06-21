@@ -53,8 +53,8 @@ pub enum SwapError {
     #[error("Cache error: {0}")]
     CacheError(String),
 
-    #[error("Parse error: {0}")]
-    ParseError(#[from] ParsePubkeyError),
+    #[error("Parse pubkey error: {0}")]
+    ParsePubkeyError(#[from] ParsePubkeyError),
 
     #[error("Pool not found: {0}")]
     PoolNotFound(String),
@@ -73,6 +73,15 @@ pub enum SwapError {
 
     #[error("Simulation failed: {0}")]
     SimulationFailed(String),
+
+    #[error("Invalid pool type: {0}")]
+    InvalidPoolType(String),
+
+    #[error("Pool not active")]
+    PoolNotActive,
+
+    #[error("Parse error: {0}")]
+    ParseError(String),
 
     #[error("Other error: {0}")]
     Other(String),

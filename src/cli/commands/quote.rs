@@ -4,6 +4,7 @@ use crate::discovery::PoolDiscovery;
 use crate::quotes::QuoteEngine;
 use crate::selection::PoolSelector;
 use colored::*;
+use console::style;
 use log::info;
 use std::sync::Arc;
 
@@ -77,7 +78,7 @@ pub async fn execute(args: QuoteArgs) -> SwapResult<()> {
         }
     }
 
-    println!("{}", "💡 Tip: Use --all flag to see all available pools".dim());
+    println!("{}", style("💡 Tip: Use --all flag to see all available pools").dim());
 
     Ok(())
 }

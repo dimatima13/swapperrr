@@ -124,6 +124,12 @@ impl crate::quotes::QuoteCalculator for AmmQuoteCalculator {
             "AMM Quote: amount_in={}, reserve_in={}, reserve_out={}, fee={}",
             request.amount_in, reserve_in, reserve_out, pool.fee_rate
         );
+        debug!(
+            "Token mapping: in={} (looking for {}), out={}",
+            if pool.token_a.mint == request.token_in { &pool.token_a.symbol } else { &pool.token_b.symbol },
+            request.token_in,
+            if pool.token_a.mint == request.token_in { &pool.token_b.symbol } else { &pool.token_a.symbol }
+        );
 
         // Calculate output amount
         let amount_out = self.calculate_output_amount(
@@ -169,6 +175,7 @@ impl Default for AmmQuoteCalculator {
 mod tests {
     use super::*;
     use crate::core::{PoolType, TokenInfo};
+    use crate::quotes::QuoteCalculator;
     use solana_sdk::pubkey::Pubkey;
 
     fn create_test_pool(reserve_a: u64, reserve_b: u64) -> PoolInfo {

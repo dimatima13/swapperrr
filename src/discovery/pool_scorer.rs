@@ -70,7 +70,21 @@ impl PoolScorer {
                     1.2
                 }
             }
-            PoolType::CLMM => 1.1, // Bonus for capital efficiency
+            PoolType::CLMM => {
+                // CLMM pools get bonus for capital efficiency
+                // Higher bonus for pools with tighter fee tiers
+                if let crate::core::PoolState::CLMM { fee_tier, .. } = &pool.pool_state {
+                    match fee_tier {
+                        1 => 1.3,    // 0.01% fee - highest capital efficiency
+                        5 => 1.25,   // 0.05% fee
+                        30 => 1.2,   // 0.3% fee
+                        100 => 1.15, // 1% fee
+                        _ => 1.1,    // Other fee tiers
+                    }
+                } else {
+                    1.1
+                }
+            }
             PoolType::AMM => 1.0,
             PoolType::Standard => 0.9, // Slight penalty for legacy pools
         }

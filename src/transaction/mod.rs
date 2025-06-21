@@ -1,4 +1,7 @@
+pub mod amm_swap;
+
 use crate::core::{
+    constants::AMM_V4_PROGRAM,
     PoolType, SwapError, SwapParams, SwapResult, TransactionResult,
 };
 use chrono::Utc;
@@ -107,15 +110,18 @@ impl TransactionExecutor {
 
     /// Build AMM swap instruction
     async fn build_amm_swap_instruction(&self, params: &SwapParams) -> SwapResult<Instruction> {
-        // TODO: Implement actual AMM swap instruction building
-        // This would involve:
-        // 1. Getting user token accounts
-        // 2. Creating ATA if needed
-        // 3. Building the swap instruction with proper accounts
+        // Get pool account data to extract all necessary accounts
+        let pool_data = self.rpc_client
+            .get_account_data(&params.quote.pool_info.address)
+            .await?;
         
-        Err(SwapError::Other(
-            "AMM swap instruction building not yet implemented".to_string(),
-        ))
+        // Build the swap instruction using the pool state
+        amm_swap::build_amm_swap_instruction_with_state(
+            params,
+            &self.keypair.pubkey(),
+            &AMM_V4_PROGRAM,
+            &pool_data,
+        ).await
     }
 
     /// Build Stable swap instruction

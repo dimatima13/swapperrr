@@ -226,6 +226,7 @@ impl Default for ClmmQuoteCalculator {
 mod tests {
     use super::*;
     use crate::core::{PoolType, TokenInfo};
+    use crate::quotes::QuoteCalculator;
     use solana_sdk::pubkey::Pubkey;
 
     fn create_test_clmm_pool(

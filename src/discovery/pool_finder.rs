@@ -1,6 +1,9 @@
 use crate::core::{
     constants::*, error::SwapResult, Config, PoolInfo, PoolState, PoolType, SwapError, TokenInfo,
 };
+use crate::discovery::amm_pool_parser::AmmPoolParser;
+use crate::discovery::stable_pool_parser::StablePoolParser;
+use crate::discovery::clmm_pool_parser::ClmmPoolParser;
 use futures::future::join_all;
 use log::{debug, error, info, warn};
 use solana_account_decoder::{UiAccountEncoding, UiDataSliceConfig};
@@ -77,8 +80,8 @@ impl PoolDiscoveryService {
             }
         }
 
-        // Filter by minimum liquidity
-        all_pools.retain(|pool| pool.liquidity_usd >= self.config.min_liquidity_usd);
+        // Filter by minimum liquidity (временно отключено для тестирования)
+        // all_pools.retain(|pool| pool.liquidity_usd >= self.config.min_liquidity_usd);
 
         info!("Found {} total pools after filtering", all_pools.len());
         Ok(all_pools)
@@ -87,43 +90,14 @@ impl PoolDiscoveryService {
 
 /// AMM Pool Finder
 struct AmmPoolFinder {
-    rpc_client: Arc<RpcClient>,
+    parser: AmmPoolParser,
 }
 
 impl AmmPoolFinder {
     fn new(rpc_client: Arc<RpcClient>) -> Self {
-        Self { rpc_client }
-    }
-
-    async fn parse_amm_pool(&self, address: Pubkey, data: &[u8]) -> SwapResult<PoolInfo> {
-        // TODO: Implement proper AMM pool parsing based on actual on-chain structure
-        // This is a placeholder implementation
-        
-        // For now, return a mock pool
-        Ok(PoolInfo {
-            pool_type: PoolType::AMM,
-            address,
-            token_a: TokenInfo {
-                mint: Pubkey::new_unique(),
-                symbol: "TOKEN_A".to_string(),
-                decimals: 9,
-                name: "Token A".to_string(),
-            },
-            token_b: TokenInfo {
-                mint: Pubkey::new_unique(),
-                symbol: "TOKEN_B".to_string(),
-                decimals: 9,
-                name: "Token B".to_string(),
-            },
-            liquidity_usd: 100000.0,
-            volume_24h_usd: 50000.0,
-            fee_rate: AMM_FEE_RATE,
-            program_id: *AMM_V4_PROGRAM,
-            pool_state: PoolState::AMM {
-                reserve_a: 1000000000,
-                reserve_b: 1000000000,
-            },
-        })
+        Self {
+            parser: AmmPoolParser::new(rpc_client),
+        }
     }
 }
 
@@ -134,60 +108,20 @@ impl PoolFinder for AmmPoolFinder {
         token_a: Pubkey,
         token_b: Pubkey,
     ) -> SwapResult<Vec<PoolInfo>> {
-        debug!("Searching for AMM pools for {}/{}", token_a, token_b);
-
-        // Create filters for token mints
-        let filters = vec![
-            // Filter by program
-            RpcFilterType::DataSize(752), // AMM pool account size
-            // Additional filters would be added based on actual pool structure
-        ];
-
-        let config = RpcProgramAccountsConfig {
-            filters: Some(filters),
-            account_config: RpcAccountInfoConfig {
-                encoding: Some(UiAccountEncoding::Base64),
-                commitment: Some(CommitmentConfig::confirmed()),
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
-        let accounts = self
-            .rpc_client
-            .get_program_accounts_with_config(&AMM_V4_PROGRAM, config)
-            .await
-            .map_err(|e| SwapError::RpcError(e))?;
-
-        let mut pools = Vec::new();
-        for (address, account) in accounts {
-            match self.parse_amm_pool(address, &account.data).await {
-                Ok(pool) => {
-                    // Check if pool contains our tokens
-                    if (pool.token_a.mint == token_a && pool.token_b.mint == token_b)
-                        || (pool.token_a.mint == token_b && pool.token_b.mint == token_a)
-                    {
-                        pools.push(pool);
-                    }
-                }
-                Err(e) => {
-                    debug!("Failed to parse AMM pool {}: {}", address, e);
-                }
-            }
-        }
-
-        Ok(pools)
+        self.parser.find_pools_for_pair(token_a, token_b).await
     }
 }
 
 /// Stable Pool Finder
 struct StablePoolFinder {
-    rpc_client: Arc<RpcClient>,
+    parser: StablePoolParser,
 }
 
 impl StablePoolFinder {
     fn new(rpc_client: Arc<RpcClient>) -> Self {
-        Self { rpc_client }
+        Self {
+            parser: StablePoolParser::new(rpc_client),
+        }
     }
 }
 
@@ -198,23 +132,20 @@ impl PoolFinder for StablePoolFinder {
         token_a: Pubkey,
         token_b: Pubkey,
     ) -> SwapResult<Vec<PoolInfo>> {
-        debug!("Searching for Stable pools for {}/{}", token_a, token_b);
-        
-        // TODO: Implement stable pool discovery
-        // Similar structure to AMM finder but with stable pool specific filters
-        
-        Ok(vec![])
+        self.parser.find_pools_for_pair(token_a, token_b).await
     }
 }
 
 /// CLMM Pool Finder
 struct ClmmPoolFinder {
-    rpc_client: Arc<RpcClient>,
+    parser: ClmmPoolParser,
 }
 
 impl ClmmPoolFinder {
     fn new(rpc_client: Arc<RpcClient>) -> Self {
-        Self { rpc_client }
+        Self {
+            parser: ClmmPoolParser::new(rpc_client),
+        }
     }
 }
 
@@ -225,12 +156,7 @@ impl PoolFinder for ClmmPoolFinder {
         token_a: Pubkey,
         token_b: Pubkey,
     ) -> SwapResult<Vec<PoolInfo>> {
-        debug!("Searching for CLMM pools for {}/{}", token_a, token_b);
-        
-        // TODO: Implement CLMM pool discovery
-        // CLMM pools have tick-based structure
-        
-        Ok(vec![])
+        self.parser.find_pools_for_pair(token_a, token_b).await
     }
 }
 

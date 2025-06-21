@@ -2,6 +2,7 @@ use crate::cli::{display::PoolDisplay, PoolsArgs};
 use crate::core::{Config, SwapResult};
 use crate::discovery::PoolDiscovery;
 use colored::*;
+use console::style;
 use log::info;
 
 pub async fn execute(args: PoolsArgs) -> SwapResult<()> {
@@ -64,7 +65,7 @@ pub async fn execute(args: PoolsArgs) -> SwapResult<()> {
     if !args.detailed {
         println!(
             "{}",
-            "💡 Tip: Use --detailed flag for more pool information".dim()
+            style("💡 Tip: Use --detailed flag for more pool information").dim()
         );
     }
 

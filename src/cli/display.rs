@@ -256,19 +256,20 @@ impl PoolDisplay {
             .bold()
         );
         
-        let slippage_color = if actual_slippage < 0.1 {
-            "green"
+        let slippage_str = format!("{:.3}%", actual_slippage);
+        let slippage_colored = if actual_slippage < 0.1 {
+            slippage_str.green()
         } else if actual_slippage < 0.5 {
-            "yellow"
+            slippage_str.yellow()
         } else {
-            "red"
+            slippage_str.red()
         };
         
         println!(
             "Expected Output: {} | Actual Output: {} | Slippage: {}",
             expected_out,
             actual_out,
-            style(format!("{:.3}%", actual_slippage)).fg(colored::Color::from(slippage_color))
+            slippage_colored
         );
     }
 }

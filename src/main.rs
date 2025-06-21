@@ -17,7 +17,7 @@ use cli::{Cli, Commands};
 async fn main() -> Result<()> {
     // Initialize environment from .env file
     dotenv::dotenv().ok();
-    
+
     // Initialize logger
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     
