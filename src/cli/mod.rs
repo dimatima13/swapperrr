@@ -80,6 +80,10 @@ pub struct SwapArgs {
     /// Use legacy transaction format instead of v0
     #[arg(long)]
     pub legacy: bool,
+
+    /// Use Address Lookup Tables (ALT) for transaction optimization
+    #[arg(long)]
+    pub use_alt: bool,
 }
 
 #[derive(Parser)]

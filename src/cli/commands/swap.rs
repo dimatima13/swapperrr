@@ -7,7 +7,7 @@ use crate::transaction::TransactionExecutor;
 use colored::*;
 use console::style;
 use dialoguer::{theme::ColorfulTheme, Confirm, Password};
-use log::info;
+use log::{info, warn};
 use solana_sdk::{
     pubkey::Pubkey,
     signature::{Keypair, Signer},
@@ -177,6 +177,14 @@ pub async fn execute(args: SwapArgs) -> SwapResult<()> {
         info!("Using legacy transaction format");
     } else {
         info!("Using v0 transaction format");
+    }
+    
+    // Enable ALT if requested
+    if args.use_alt && !args.legacy {
+        executor.enable_alts(config.rpc_url.clone()).await;
+        info!("Address Lookup Tables enabled");
+    } else if args.use_alt && args.legacy {
+        warn!("ALT is only supported with v0 transactions, ignoring --use-alt flag");
     }
 
     let swap_params = SwapParams {

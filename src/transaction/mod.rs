@@ -3,6 +3,7 @@ pub mod stable_swap;
 pub mod clmm_swap;
 pub mod monitor;
 pub mod wsol;
+pub mod alt;
 
 use crate::core::{
     constants::{AMM_V4_PROGRAM, STABLE_PROGRAM, CLMM_PROGRAM},
@@ -21,6 +22,7 @@ use solana_sdk::{
     message::{VersionedMessage, v0},
     compute_budget::ComputeBudgetInstruction,
 };
+use alt::AltManager;
 use std::str::FromStr;
 use spl_associated_token_account::{get_associated_token_address, instruction::create_associated_token_account};
 
@@ -48,6 +50,8 @@ pub struct TransactionExecutor {
     keypair: Keypair,
     monitor: TransactionMonitor,
     transaction_version: TransactionVersion,
+    alt_manager: Option<AltManager>,
+    use_alts: bool,
 }
 
 impl TransactionExecutor {
@@ -68,6 +72,8 @@ impl TransactionExecutor {
             keypair,
             monitor,
             transaction_version: TransactionVersion::default(),
+            alt_manager: None,
+            use_alts: false,
         }
     }
 
@@ -93,12 +99,30 @@ impl TransactionExecutor {
             keypair,
             monitor,
             transaction_version: TransactionVersion::default(),
+            alt_manager: None,
+            use_alts: false,
         }
     }
 
     /// Set transaction version preference
     pub fn set_transaction_version(&mut self, version: TransactionVersion) {
         self.transaction_version = version;
+    }
+
+    /// Enable ALT usage
+    pub async fn enable_alts(&mut self, rpc_url: String) {
+        let rpc_client = std::sync::Arc::new(RpcClient::new_with_commitment(
+            rpc_url,
+            CommitmentConfig::confirmed(),
+        ));
+        self.alt_manager = Some(AltManager::new(rpc_client));
+        self.use_alts = true;
+        info!("Address Lookup Tables enabled");
+    }
+
+    /// Set ALT usage preference
+    pub fn set_use_alts(&mut self, use_alts: bool) {
+        self.use_alts = use_alts;
     }
 
     /// Create compute budget instructions
@@ -136,11 +160,48 @@ impl TransactionExecutor {
         );
         all_instructions.extend(instructions);
 
+        // Prepare ALT lookups if enabled
+        let alt_accounts = if self.use_alts && self.alt_manager.is_some() {
+            // Extract all unique accounts from instructions
+            let mut accounts = Vec::new();
+            for ix in &all_instructions {
+                accounts.push(ix.program_id);
+                for meta in &ix.accounts {
+                    accounts.push(meta.pubkey);
+                }
+            }
+            accounts.sort();
+            accounts.dedup();
+
+            // Check if ALTs would be beneficial
+            if AltManager::should_use_alts(accounts.len()) {
+                info!("Using ALTs for {} accounts", accounts.len());
+                if let Some(ref alt_manager) = self.alt_manager {
+                    match alt_manager.find_optimal_alts(&accounts).await {
+                        Ok(alts) => {
+                            info!("Found {} ALT accounts", alts.len());
+                            alts
+                        }
+                        Err(e) => {
+                            warn!("Failed to find ALTs: {}, continuing without them", e);
+                            vec![]
+                        }
+                    }
+                } else {
+                    vec![]
+                }
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        };
+
         // Create v0 message
         let message = v0::Message::try_compile(
             payer,
             &all_instructions,
-            &[], // No address lookup tables for now
+            &alt_accounts,
             recent_blockhash,
         ).map_err(|e| SwapError::Other(format!("Failed to compile v0 message: {}", e)))?;
 

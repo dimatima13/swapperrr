@@ -16,6 +16,7 @@ solana-account-decoder = "1.18"
 solana-transaction-status = "1.18"
 spl-token = "4.0"
 spl-associated-token-account = "3.0"
+solana-address-lookup-table-program = "1.18"
 
 # Async
 tokio = { version = "1.40", features = ["full"] }
@@ -35,6 +36,7 @@ rust_decimal = "1.36"
 
 # Caching
 dashmap = "6.0"
+cached = "0.53"
 
 # CLI
 clap = { version = "4.5", features = ["derive", "env"] }
