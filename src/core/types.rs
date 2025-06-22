@@ -1,4 +1,3 @@
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use std::fmt;
@@ -40,6 +39,7 @@ pub enum PoolState {
     AMM {
         reserve_a: u64,
         reserve_b: u64,
+        nonce: u8,
     },
     Stable {
         reserves: Vec<u64>,
@@ -82,6 +82,8 @@ pub struct QuoteResult {
     pub price_impact: f64,
     pub fee: u64,
     pub route: Vec<Pubkey>,
+    pub token_in: Pubkey,
+    pub token_out: Pubkey,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,6 +91,8 @@ pub struct SwapParams {
     pub quote: QuoteResult,
     pub user_pubkey: Pubkey,
     pub slippage_bps: u16,
+    pub token_in: Pubkey,
+    pub token_out: Pubkey,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,6 +106,10 @@ pub struct TransactionResult {
     pub actual_slippage: f64,
     pub fee_paid: u64,
     pub timestamp: i64,
+    pub retry_attempts: u32,
+    pub confirmation_time_ms: u64,
+    pub finalized: bool,
+    pub transaction_fee: Option<u64>,
 }
 
 #[derive(Debug, Clone)]

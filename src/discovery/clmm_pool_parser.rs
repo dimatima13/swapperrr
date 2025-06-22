@@ -8,7 +8,7 @@ use solana_account_decoder::UiAccountEncoding;
 use solana_client::{
     nonblocking::rpc_client::RpcClient,
     rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig},
-    rpc_filter::{Memcmp, MemcmpEncodedBytes, RpcFilterType},
+    rpc_filter::{Memcmp, RpcFilterType},
 };
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey};
 use std::sync::Arc;
@@ -82,6 +82,12 @@ impl ClmmPoolParser {
             &token_1_info,
         );
 
+        // Filter out pools with very low liquidity
+        if liquidity_usd < 300.0 {
+            debug!("CLMM pool {} has low liquidity: ${}", address, liquidity_usd);
+            return Ok(None);
+        }
+
         // Convert fee rate from CLMM format to percentage
         let fee_rate = pool_state.fee_rate as f64 / 1_000_000.0;
 
@@ -121,16 +127,14 @@ impl ClmmPoolParser {
         // Search pattern 1: token_a as token_mint_0, token_b as token_mint_1
         let filters1 = vec![
             RpcFilterType::DataSize(ClmmPoolState::LEN as u64),
-            RpcFilterType::Memcmp(Memcmp {
-                offset: 1, // token_mint_0 offset (after bump byte)
-                bytes: MemcmpEncodedBytes::Base58(token_a.to_string()),
-                encoding: None,
-            }),
-            RpcFilterType::Memcmp(Memcmp {
-                offset: 33, // token_mint_1 offset
-                bytes: MemcmpEncodedBytes::Base58(token_b.to_string()),
-                encoding: None,
-            }),
+            RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
+                1, // token_mint_0 offset (after bump byte)
+                token_a.to_bytes().to_vec(),
+            )),
+            RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
+                33, // token_mint_1 offset
+                token_b.to_bytes().to_vec(),
+            )),
         ];
 
         let config1 = RpcProgramAccountsConfig {
@@ -170,16 +174,14 @@ impl ClmmPoolParser {
         // Search pattern 2: token_b as token_mint_0, token_a as token_mint_1 (reversed)
         let filters2 = vec![
             RpcFilterType::DataSize(ClmmPoolState::LEN as u64),
-            RpcFilterType::Memcmp(Memcmp {
-                offset: 1, // token_mint_0 offset
-                bytes: MemcmpEncodedBytes::Base58(token_b.to_string()),
-                encoding: None,
-            }),
-            RpcFilterType::Memcmp(Memcmp {
-                offset: 33, // token_mint_1 offset
-                bytes: MemcmpEncodedBytes::Base58(token_a.to_string()),
-                encoding: None,
-            }),
+            RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
+                1, // token_mint_0 offset
+                token_b.to_bytes().to_vec(),
+            )),
+            RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
+                33, // token_mint_1 offset
+                token_a.to_bytes().to_vec(),
+            )),
         ];
 
         let config2 = RpcProgramAccountsConfig {
@@ -245,6 +247,7 @@ impl ClmmPoolParser {
         // 1. Query token metadata from Metaplex
         // 2. Cache token info
         // 3. Use a token list API
+        // TODO: Implement proper token metadata retrieval
         
         // For now, return basic info based on known tokens
         let (symbol, name, decimals) = match mint.to_string().as_str() {
@@ -295,18 +298,19 @@ impl ClmmPoolParser {
     ) -> f64 {
         // In production, use price oracle
         // For now, use simple heuristics
+        // TODO: Implement proper price retrieval
         
         let value_0 = match token_0.symbol.as_str() {
-            "SOL" => (reserve_0 as f64 / 10f64.powi(token_0.decimals as i32)) * 40.0,
+            "SOL" => (reserve_0 as f64 / 10f64.powi(token_0.decimals as i32)) * 140.0,
             "USDC" | "USDT" => reserve_0 as f64 / 10f64.powi(token_0.decimals as i32),
-            "ETH" => (reserve_0 as f64 / 10f64.powi(token_0.decimals as i32)) * 2400.0,
+            "ETH" => (reserve_0 as f64 / 10f64.powi(token_0.decimals as i32)) * 3000.0,
             _ => 0.0,
         };
 
         let value_1 = match token_1.symbol.as_str() {
-            "SOL" => (reserve_1 as f64 / 10f64.powi(token_1.decimals as i32)) * 40.0,
+            "SOL" => (reserve_1 as f64 / 10f64.powi(token_1.decimals as i32)) * 140.0,
             "USDC" | "USDT" => reserve_1 as f64 / 10f64.powi(token_1.decimals as i32),
-            "ETH" => (reserve_1 as f64 / 10f64.powi(token_1.decimals as i32)) * 2400.0,
+            "ETH" => (reserve_1 as f64 / 10f64.powi(token_1.decimals as i32)) * 3000.0,
             _ => 0.0,
         };
 

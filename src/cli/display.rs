@@ -1,9 +1,8 @@
-use crate::core::{PoolInfo, PoolType, QuoteResult};
+use crate::core::{PoolInfo, PoolType, PoolState, QuoteResult};
 use crate::selection::QuotesByType;
 use colored::*;
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
-use std::fmt;
 
 /// Display helper for pool information
 pub struct PoolDisplay;
@@ -32,25 +31,32 @@ impl PoolDisplay {
             best_marker
         );
 
+        // Determine input and output tokens based on swap direction
+        let (input_token, output_token) = if quote.token_in == quote.pool_info.token_a.mint {
+            (&quote.pool_info.token_a, &quote.pool_info.token_b)
+        } else {
+            (&quote.pool_info.token_b, &quote.pool_info.token_a)
+        };
+
         println!(
             "  {} {} → {} {}",
-            format_amount(quote.amount_in, &quote.pool_info.token_a),
-            quote.pool_info.token_a.symbol,
-            format_amount(quote.amount_out, &quote.pool_info.token_b),
-            quote.pool_info.token_b.symbol
+            format_amount(quote.amount_in, input_token),
+            input_token.symbol,
+            format_amount(quote.amount_out, output_token),
+            output_token.symbol
         );
 
         println!(
             "  Price Impact: {} | Fee: {} {}",
             format_impact(quote.price_impact),
-            format_amount(quote.fee, &quote.pool_info.token_a),
-            quote.pool_info.token_a.symbol
+            format_amount(quote.fee, input_token),
+            input_token.symbol
         );
 
         println!(
             "  Min Output: {} {} ({}% slippage)",
-            format_amount(quote.min_amount_out, &quote.pool_info.token_b),
-            quote.pool_info.token_b.symbol,
+            format_amount(quote.min_amount_out, output_token),
+            output_token.symbol,
             ((quote.amount_out - quote.min_amount_out) as f64 / quote.amount_out as f64 * 100.0)
         );
 
@@ -110,6 +116,58 @@ impl PoolDisplay {
         }
     }
 
+    /// Display detailed information about a single pool
+    pub fn display_pool_detailed(pool: &PoolInfo) {
+        let pool_type_str = match pool.pool_type {
+            PoolType::AMM => "AMM Pool".bright_green(),
+            PoolType::Stable => "Stable Pool".bright_blue(),
+            PoolType::CLMM => "CLMM Pool".bright_magenta(),
+            PoolType::Standard => "Standard Pool".white(),
+        };
+
+        println!("{}", pool_type_str.bold());
+        println!("Address: {}", style(pool.address.to_string()).dim());
+        println!("Tokens: {} / {}", pool.token_a.symbol, pool.token_b.symbol);
+        println!("Liquidity: ${:.2}", pool.liquidity_usd);
+        println!("Volume 24h: ${:.2}", pool.volume_24h_usd);
+        println!("Fee Rate: {:.2}%", pool.fee_rate * 100.0);
+        
+        // Display pool-specific state
+        match &pool.pool_state {
+            PoolState::AMM { reserve_a, reserve_b, .. } => {
+                println!("Reserves: {} {} / {} {}", 
+                    format_amount(*reserve_a, &pool.token_a),
+                    pool.token_a.symbol,
+                    format_amount(*reserve_b, &pool.token_b),
+                    pool.token_b.symbol
+                );
+            }
+            PoolState::Stable { reserves, amp_factor } => {
+                println!("Reserves: {} {} / {} {}", 
+                    format_amount(*reserves.get(0).unwrap_or(&0), &pool.token_a),
+                    pool.token_a.symbol,
+                    format_amount(*reserves.get(1).unwrap_or(&0), &pool.token_b),
+                    pool.token_b.symbol
+                );
+                println!("Amplification Factor: {}", amp_factor);
+            }
+            PoolState::CLMM { current_tick, tick_spacing, liquidity, fee_tier } => {
+                println!("Current Tick: {}", current_tick);
+                println!("Tick Spacing: {}", tick_spacing);
+                println!("Liquidity: {}", liquidity);
+                println!("Fee Tier: {} bps", fee_tier);
+            }
+            PoolState::Standard { reserve_a, reserve_b } => {
+                println!("Reserves: {} {} / {} {}", 
+                    format_amount(*reserve_a, &pool.token_a),
+                    pool.token_a.symbol,
+                    format_amount(*reserve_b, &pool.token_b),
+                    pool.token_b.symbol
+                );
+            }
+        }
+    }
+
     /// Display pool list
     pub fn display_pool_list(pools: &[PoolInfo], detailed: bool) {
         println!("\n{}", style("🏊 Available Pools").bold().underlined());
@@ -140,7 +198,7 @@ impl PoolDisplay {
                 println!("   Fee: {:.2}%", pool.fee_rate * 100.0);
                 
                 match &pool.pool_state {
-                    crate::core::PoolState::AMM { reserve_a, reserve_b } => {
+                    crate::core::PoolState::AMM { reserve_a, reserve_b, .. } => {
                         println!(
                             "   Reserves: {} {} | {} {}",
                             format_amount(*reserve_a, &pool.token_a),
@@ -214,23 +272,31 @@ impl PoolDisplay {
             }
             .bold()
         );
+        
+        // Determine input and output tokens based on swap direction
+        let (input_token, output_token) = if quote.token_in == quote.pool_info.token_a.mint {
+            (&quote.pool_info.token_a, &quote.pool_info.token_b)
+        } else {
+            (&quote.pool_info.token_b, &quote.pool_info.token_a)
+        };
+        
         println!(
             "Swap: {} {} → {} {}",
-            format_amount(quote.amount_in, &quote.pool_info.token_a),
-            quote.pool_info.token_a.symbol.bold(),
-            format_amount(quote.amount_out, &quote.pool_info.token_b),
-            quote.pool_info.token_b.symbol.bold()
+            format_amount(quote.amount_in, input_token),
+            input_token.symbol.bold(),
+            format_amount(quote.amount_out, output_token),
+            output_token.symbol.bold()
         );
         println!(
             "Price Impact: {} | Fee: {} {}",
             format_impact(quote.price_impact),
-            format_amount(quote.fee, &quote.pool_info.token_a),
-            quote.pool_info.token_a.symbol
+            format_amount(quote.fee, input_token),
+            input_token.symbol
         );
         println!(
             "Min Output: {} {} (with slippage)",
-            format_amount(quote.min_amount_out, &quote.pool_info.token_b),
-            quote.pool_info.token_b.symbol
+            format_amount(quote.min_amount_out, output_token),
+            output_token.symbol
         );
         println!("Pool: {}", style(format!("{}", quote.pool_info.address)).dim());
     }
@@ -242,6 +308,7 @@ impl PoolDisplay {
         expected_out: u64,
         actual_out: u64,
         actual_slippage: f64,
+        output_token: &crate::core::TokenInfo,
     ) {
         println!("\n{}", style("✅ Transaction Successful!").bold().green());
         println!("Signature: {}", style(signature).dim());
@@ -266,9 +333,11 @@ impl PoolDisplay {
         };
         
         println!(
-            "Expected Output: {} | Actual Output: {} | Slippage: {}",
-            expected_out,
-            actual_out,
+            "Expected Output: {} {} | Actual Output: {} {} | Slippage: {}",
+            format_amount(expected_out, output_token),
+            output_token.symbol,
+            format_amount(actual_out, output_token),
+            output_token.symbol,
             slippage_colored
         );
     }

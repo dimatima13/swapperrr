@@ -1,5 +1,5 @@
 use crate::core::{
-    constants::AMM_FEE_RATE, PoolInfo, PoolState, QuoteRequest, QuoteResult, SwapError,
+    PoolInfo, PoolState, QuoteRequest, QuoteResult, SwapError,
     SwapResult,
 };
 use log::debug;
@@ -102,7 +102,7 @@ impl crate::quotes::QuoteCalculator for AmmQuoteCalculator {
     ) -> SwapResult<QuoteResult> {
         // Extract reserves from pool state
         let (reserve_in, reserve_out) = match &pool.pool_state {
-            PoolState::AMM { reserve_a, reserve_b } => {
+            PoolState::AMM { reserve_a, reserve_b, .. } => {
                 if pool.token_a.mint == request.token_in {
                     (*reserve_a, *reserve_b)
                 } else if pool.token_b.mint == request.token_in {
@@ -161,6 +161,8 @@ impl crate::quotes::QuoteCalculator for AmmQuoteCalculator {
             price_impact,
             fee,
             route: vec![pool.address],
+            token_in: request.token_in,
+            token_out: request.token_out,
         })
     }
 }
@@ -200,6 +202,7 @@ mod tests {
             token_b,
             liquidity_usd: 100000.0,
             volume_24h_usd: 50000.0,
+            // TODO: fix this
             fee_rate: AMM_FEE_RATE,
             program_id: Pubkey::new_unique(),
             pool_state: PoolState::AMM {

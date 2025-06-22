@@ -8,7 +8,7 @@ use solana_account_decoder::UiAccountEncoding;
 use solana_client::{
     nonblocking::rpc_client::RpcClient,
     rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig},
-    rpc_filter::{Memcmp, MemcmpEncodedBytes, RpcFilterType},
+    rpc_filter::{Memcmp, RpcFilterType},
 };
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, clock::Clock, sysvar};
 use std::sync::Arc;
@@ -242,8 +242,8 @@ impl StablePoolParser {
 
     /// Get token metadata
     async fn get_token_info(&self, mint: &Pubkey) -> SwapResult<TokenInfo> {
-        // In production, you would:
-        // 1. Query token metadata from Metaplex
+        // TODO
+        // 1. Query token metadata from Metaplex?
         // 2. Cache token info
         // 3. Use a token list API
         
@@ -312,7 +312,7 @@ impl StablePoolParser {
         token_a: &TokenInfo,
         token_b: &TokenInfo,
     ) -> f64 {
-        // In production, use price oracle
+        // TODO use price oracle
         // For now, use simple heuristics for stablecoins
         
         let value_a = match token_a.symbol.as_str() {

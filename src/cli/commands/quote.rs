@@ -1,11 +1,13 @@
 use crate::cli::{display::PoolDisplay, QuoteArgs};
-use crate::core::{Config, QuoteRequest, SwapError, SwapResult};
+use crate::core::{Config, QuoteRequest, SwapResult};
 use crate::discovery::PoolDiscovery;
 use crate::quotes::QuoteEngine;
 use crate::selection::PoolSelector;
 use colored::*;
 use console::style;
 use log::info;
+use solana_sdk::pubkey::Pubkey;
+use std::str::FromStr;
 use std::sync::Arc;
 
 pub async fn execute(args: QuoteArgs) -> SwapResult<()> {
@@ -25,20 +27,35 @@ pub async fn execute(args: QuoteArgs) -> SwapResult<()> {
 
     pb.set_message("Discovering pools...");
 
+    // SOL/wSOL mint address
+    let sol_mint = Pubkey::from_str("So11111111111111111111111111111111111111112").unwrap();
+    
+    // Determine token_out - always SOL if not specified
+    let token_out = args.token_out.unwrap_or(sol_mint);
+    
+    // Check if trying to quote same token
+    if args.token_in == token_out {
+        pb.finish_and_clear();
+        println!("{}", "❌ Cannot swap token to itself".red().bold());
+        return Ok(());
+    }
+
     // Convert amount to smallest units based on token decimals
-    // For now, assume 9 decimals for input token (will be improved with token metadata)
-    let amount_in = (args.amount * 10f64.powi(9)) as u64;
+    // For now, assume 6 decimals for pump tokens, 9 for SOL
+    // TODO: Get actual decimals from token metadata
+    let decimals = if args.token_in == sol_mint { 9 } else { 6 };
+    let amount_in = (args.amount * 10f64.powi(decimals)) as u64;
 
     let request = QuoteRequest {
         token_in: args.token_in,
-        token_out: args.token_out,
+        token_out,
         amount_in,
         slippage_bps: args.slippage,
     };
 
     info!(
         "Getting quotes for {} -> {} (amount: {}, slippage: {} bps)",
-        args.token_in, args.token_out, amount_in, args.slippage
+        args.token_in, token_out, amount_in, args.slippage
     );
 
     if args.all {

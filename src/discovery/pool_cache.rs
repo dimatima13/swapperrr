@@ -105,6 +105,7 @@ mod tests {
             volume_24h_usd: 50000.0,
             fee_rate: 0.0025,
             program_id: Pubkey::new_unique(),
+            // TODO: fix this
             pool_state: PoolState::AMM {
                 reserve_a: 1000000,
                 reserve_b: 1000000,

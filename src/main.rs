@@ -1,43 +1,42 @@
-use anyhow::Result;
 use clap::Parser;
-use env_logger::Env;
-use log::info;
-
-mod cli;
-mod core;
-mod discovery;
-mod quotes;
-mod selection;
-mod transaction;
-mod utils;
-
-use cli::{Cli, Commands};
+use raydium_multipool_swap::cli::{Cli, Commands};
+use raydium_multipool_swap::core::{Config, SwapError};
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    // Initialize environment from .env file
-    dotenv::dotenv().ok();
-
+async fn main() -> Result<(), SwapError> {
     // Initialize logger
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
-    
-    info!("Starting Raydium Multi-Pool Swap Tool");
-    
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
+    // Load configuration
+    dotenv::dotenv().ok();
+    let config = Config::from_env()?;
+
     // Parse CLI arguments
     let cli = Cli::parse();
-    
+
     // Execute command
     match cli.command {
         Commands::Quote(args) => {
-            cli::commands::quote::execute(args).await?;
+            raydium_multipool_swap::cli::commands::quote::execute(args).await?;
         }
         Commands::Swap(args) => {
-            cli::commands::swap::execute(args).await?;
+            raydium_multipool_swap::cli::commands::swap::execute(args).await?;
         }
         Commands::Pools(args) => {
-            cli::commands::pools::execute(args).await?;
+            raydium_multipool_swap::cli::commands::pools::execute(args).await?;
+        }
+        Commands::TokenPools(args) => {
+            raydium_multipool_swap::cli::commands::token_pools::execute(args).await?;
+        }
+        Commands::Wrap(args) => {
+            use raydium_multipool_swap::cli::commands::wrap::WrapCommand;
+            let wrap_cmd = WrapCommand {
+                amount: args.amount,
+                unwrap: args.unwrap,
+            };
+            wrap_cmd.execute(config).await?;
         }
     }
-    
+
     Ok(())
 }

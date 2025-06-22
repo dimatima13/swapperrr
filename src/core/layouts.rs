@@ -1,6 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_sdk::pubkey::Pubkey;
-use std::mem::size_of;
 
 /// Raydium AMM V4 Pool State Layout
 #[derive(Debug, Clone)]
@@ -117,23 +116,26 @@ impl AmmInfoLayoutV4 {
             // u64 field (256-263)
             system_decimals_value: read_u64(256),
             
-            // Padding from 264 to 399
+            // Pubkey fields - CORRECTED offsets based on actual pool data
+            // IMPORTANT: Some pools have swapped vault positions!
+            // Standard layout has coin at 336 and pc at 368
+            pool_coin_token_account: read_pubkey(336), // Coin vault at offset 336
+            pool_pc_token_account: read_pubkey(368),   // PC vault at offset 368
             
-            // Pubkey fields - verified offsets from on-chain data
-            // Note: In the known pool, these are at different offsets
-            pool_coin_token_account: read_pubkey(368), // HLmqeL62xR1QoZ1HKKbXRrdN1p3phKpxRMb2VVopvBBz
-            pool_pc_token_account: read_pubkey(336),   // DQyrAcCrDXQ7NeoqGgDCZwBvWDcYmFCjSb9JtteuvPpz
+            // Mint addresses are at 400 and 432
             coin_mint_address: read_pubkey(400),
             pc_mint_address: read_pubkey(432),
-            lp_mint_address: read_pubkey(464),
-            amm_open_orders: read_pubkey(496),
-            serum_market: read_pubkey(528),
-            serum_program_id: read_pubkey(560),
-            amm_target_orders: read_pubkey(592),
-            pool_withdraw_queue: read_pubkey(624),
-            pool_temp_lp_token_account: read_pubkey(656),
-            amm_owner: Pubkey::default(), // Not in the standard layout
-            pnl_owner: Pubkey::default(), // Not in the standard layout
+            
+            // Other account addresses
+            lp_mint_address: read_pubkey(256),
+            amm_open_orders: read_pubkey(288),
+            serum_market: read_pubkey(320),
+            serum_program_id: read_pubkey(352),
+            amm_target_orders: read_pubkey(384),
+            pool_withdraw_queue: read_pubkey(416),
+            pool_temp_lp_token_account: read_pubkey(448),
+            amm_owner: read_pubkey(480),
+            pnl_owner: read_pubkey(512)
         })
     }
 

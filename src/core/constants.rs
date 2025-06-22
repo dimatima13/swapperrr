@@ -10,11 +10,16 @@ pub const RAYDIUM_ROUTING_PROGRAM_ID: &str = "routeUGWgWzqBWFcrCfv8tritsqukccJPu
 
 // Program IDs as Pubkey
 lazy_static::lazy_static! {
-    pub static ref AMM_V4_PROGRAM: Pubkey = Pubkey::from_str(RAYDIUM_AMM_V4_PROGRAM_ID).unwrap();
-    pub static ref CP_SWAP_PROGRAM: Pubkey = Pubkey::from_str(RAYDIUM_CP_SWAP_PROGRAM_ID).unwrap();
-    pub static ref STABLE_PROGRAM: Pubkey = Pubkey::from_str(RAYDIUM_STABLE_PROGRAM_ID).unwrap();
-    pub static ref CLMM_PROGRAM: Pubkey = Pubkey::from_str(RAYDIUM_CLMM_PROGRAM_ID).unwrap();
-    pub static ref ROUTING_PROGRAM: Pubkey = Pubkey::from_str(RAYDIUM_ROUTING_PROGRAM_ID).unwrap();
+    pub static ref RAYDIUM_AMM_V4_PROGRAM: Pubkey = Pubkey::from_str(RAYDIUM_AMM_V4_PROGRAM_ID).unwrap();
+    pub static ref RAYDIUM_CP_SWAP_PROGRAM: Pubkey = Pubkey::from_str(RAYDIUM_CP_SWAP_PROGRAM_ID).unwrap();
+    pub static ref RAYDIUM_STABLE_PROGRAM: Pubkey = Pubkey::from_str(RAYDIUM_STABLE_PROGRAM_ID).unwrap();
+    pub static ref RAYDIUM_CLMM_PROGRAM: Pubkey = Pubkey::from_str(RAYDIUM_CLMM_PROGRAM_ID).unwrap();
+    pub static ref RAYDIUM_ROUTING_PROGRAM: Pubkey = Pubkey::from_str(RAYDIUM_ROUTING_PROGRAM_ID).unwrap();
+    
+    // Короткие алиасы для обратной совместимости
+    pub static ref AMM_V4_PROGRAM: Pubkey = *RAYDIUM_AMM_V4_PROGRAM;
+    pub static ref STABLE_PROGRAM: Pubkey = *RAYDIUM_STABLE_PROGRAM;
+    pub static ref CLMM_PROGRAM: Pubkey = *RAYDIUM_CLMM_PROGRAM;
 }
 
 // Common token addresses

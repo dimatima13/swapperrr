@@ -83,6 +83,12 @@ pub enum SwapError {
     #[error("Parse error: {0}")]
     ParseError(String),
 
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
+    #[error("Insufficient balance: {0}")]
+    InsufficientBalance(String),
+
     #[error("Other error: {0}")]
     Other(String),
 }

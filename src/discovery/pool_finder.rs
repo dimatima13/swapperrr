@@ -1,16 +1,14 @@
 use crate::core::{
-    constants::*, error::SwapResult, Config, PoolInfo, PoolState, PoolType, SwapError, TokenInfo,
+    error::SwapResult, Config, PoolInfo,
 };
 use crate::discovery::amm_pool_parser::AmmPoolParser;
 use crate::discovery::stable_pool_parser::StablePoolParser;
-use crate::discovery::clmm_pool_parser::ClmmPoolParser;
+use crate::discovery::clmm_pool_parser_optimized::OptimizedClmmPoolParser;
+use crate::discovery::cp_pool_parser::CpPoolParser;
 use futures::future::join_all;
-use log::{debug, error, info, warn};
-use solana_account_decoder::{UiAccountEncoding, UiDataSliceConfig};
+use log::{debug, info, warn};
 use solana_client::{
     nonblocking::rpc_client::RpcClient,
-    rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig},
-    rpc_filter::{Memcmp, MemcmpEncodedBytes, RpcFilterType},
 };
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey};
 use std::sync::Arc;
@@ -40,10 +38,11 @@ impl PoolDiscoveryService {
         ));
 
         let finders: Vec<Box<dyn PoolFinder>> = vec![
-            Box::new(AmmPoolFinder::new(rpc_client.clone())),
+            Box::new(AmmPoolFinder::new(rpc_client.clone(), config.rpc_url.clone())),
             Box::new(StablePoolFinder::new(rpc_client.clone())),
-            Box::new(ClmmPoolFinder::new(rpc_client.clone())),
+            Box::new(ClmmPoolFinder::new(rpc_client.clone(), config.rpc_url.clone())),
             Box::new(StandardPoolFinder::new(rpc_client.clone())),
+            Box::new(CpPoolFinder::new(rpc_client.clone())),
         ];
 
         Ok(Self {
@@ -80,11 +79,22 @@ impl PoolDiscoveryService {
             }
         }
 
-        // Filter by minimum liquidity (временно отключено для тестирования)
+        // TODO: handle this
+        // Filter by minimum liquidity
         // all_pools.retain(|pool| pool.liquidity_usd >= self.config.min_liquidity_usd);
 
         info!("Found {} total pools after filtering", all_pools.len());
         Ok(all_pools)
+    }
+
+    /// Find all pools containing a specific token
+    pub async fn find_pools_by_token(&self, token: Pubkey) -> SwapResult<Vec<PoolInfo>> {
+        info!("Searching for all pools containing token {}", token);
+
+        // TODO: Implement token-based discovery across all finders
+        // For now, only use AMM finder - expand to other pool types later
+        let amm_finder = AmmPoolFinder::new(self.rpc_client.clone(), self.config.rpc_url.clone());
+        amm_finder.parser.find_pools_by_token(token).await
     }
 }
 
@@ -94,9 +104,9 @@ struct AmmPoolFinder {
 }
 
 impl AmmPoolFinder {
-    fn new(rpc_client: Arc<RpcClient>) -> Self {
+    fn new(rpc_client: Arc<RpcClient>, rpc_url: String) -> Self {
         Self {
-            parser: AmmPoolParser::new(rpc_client),
+            parser: AmmPoolParser::new(rpc_client, rpc_url),
         }
     }
 }
@@ -138,13 +148,13 @@ impl PoolFinder for StablePoolFinder {
 
 /// CLMM Pool Finder
 struct ClmmPoolFinder {
-    parser: ClmmPoolParser,
+    parser: OptimizedClmmPoolParser,
 }
 
 impl ClmmPoolFinder {
-    fn new(rpc_client: Arc<RpcClient>) -> Self {
+    fn new(rpc_client: Arc<RpcClient>, rpc_url: String) -> Self {
         Self {
-            parser: ClmmPoolParser::new(rpc_client),
+            parser: OptimizedClmmPoolParser::new(rpc_client, rpc_url),
         }
     }
 }
@@ -162,12 +172,12 @@ impl PoolFinder for ClmmPoolFinder {
 
 /// Standard Pool Finder
 struct StandardPoolFinder {
-    rpc_client: Arc<RpcClient>,
+    _rpc_client: Arc<RpcClient>,
 }
 
 impl StandardPoolFinder {
     fn new(rpc_client: Arc<RpcClient>) -> Self {
-        Self { rpc_client }
+        Self { _rpc_client: rpc_client }
     }
 }
 
@@ -183,5 +193,29 @@ impl PoolFinder for StandardPoolFinder {
         // TODO: Implement standard pool discovery
         
         Ok(vec![])
+    }
+}
+
+/// CP Pool Finder
+struct CpPoolFinder {
+    parser: CpPoolParser,
+}
+
+impl CpPoolFinder {
+    fn new(rpc_client: Arc<RpcClient>) -> Self {
+        Self {
+            parser: CpPoolParser::new(rpc_client),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl PoolFinder for CpPoolFinder {
+    async fn find_pools(
+        &self,
+        token_a: Pubkey,
+        token_b: Pubkey,
+    ) -> SwapResult<Vec<PoolInfo>> {
+        self.parser.find_pools_for_pair(token_a, token_b).await
     }
 }

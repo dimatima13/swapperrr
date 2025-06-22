@@ -18,7 +18,7 @@ impl ClmmQuoteCalculator {
     /// price = 1.0001^tick
     fn tick_to_price(&self, tick: i32) -> SwapResult<Decimal> {
         let base = Decimal::from_str("1.0001").unwrap();
-        let tick_dec = Decimal::from(tick.abs());
+        let _tick_dec = Decimal::from(tick.abs());
         
         // Calculate 1.0001^|tick|
         let mut price = Decimal::ONE;
@@ -66,7 +66,7 @@ impl ClmmQuoteCalculator {
         &self,
         amount_in: u64,
         current_tick: i32,
-        tick_spacing: u16,
+        _tick_spacing: u16,
         liquidity: u128,
         fee_tier: u32,
         is_token_a_to_b: bool,
@@ -86,7 +86,8 @@ impl ClmmQuoteCalculator {
         let sqrt_price_current = self.tick_to_sqrt_price(current_tick)?;
         
         // For simplicity, assume swap happens within current tick range
-        // In reality, we would need to handle crossing multiple ticks
+        // we would need to handle crossing multiple ticks
+        // TODO: Implement tick crossing logic if needed
         let liquidity_dec = Decimal::from(liquidity);
         let amount_in_dec = Decimal::from(amount_in_after_fee);
         
@@ -212,6 +213,8 @@ impl crate::quotes::QuoteCalculator for ClmmQuoteCalculator {
             price_impact,
             fee,
             route: vec![pool.address],
+            token_in: request.token_in,
+            token_out: request.token_out,
         })
     }
 }
@@ -231,7 +234,7 @@ mod tests {
 
     fn create_test_clmm_pool(
         current_tick: i32,
-        tick_spacing: u16,
+        _tick_spacing: u16,
         liquidity: u128,
         fee_tier: u32,
     ) -> PoolInfo {

@@ -1,5 +1,5 @@
 use crate::core::{
-    constants::STABLE_FEE_RATE, PoolInfo, PoolState, QuoteRequest, QuoteResult, SwapError,
+    PoolInfo, PoolState, QuoteRequest, QuoteResult, SwapError,
     SwapResult,
 };
 use log::debug;
@@ -86,7 +86,7 @@ impl StableQuoteCalculator {
         let new_reserve_in = reserve_in + amount_in_with_fee;
         
         // Calculate new reserve_out to maintain invariant
-        let n = Decimal::from(2u64);
+        let _n = Decimal::from(2u64);
         let ann = Decimal::from(amp_factor * 4); // A * n^n for n=2
         
         let new_reserve_in_dec = Decimal::from(new_reserve_in);
@@ -182,7 +182,7 @@ impl crate::quotes::QuoteCalculator for StableQuoteCalculator {
         }
 
         // Determine which token is input/output
-        let (reserve_in, reserve_out, in_index) = if pool.token_a.mint == request.token_in {
+        let (reserve_in, reserve_out, _in_index) = if pool.token_a.mint == request.token_in {
             (reserves[0], reserves[1], 0)
         } else if pool.token_b.mint == request.token_in {
             (reserves[1], reserves[0], 1)
@@ -230,6 +230,8 @@ impl crate::quotes::QuoteCalculator for StableQuoteCalculator {
             price_impact,
             fee,
             route: vec![pool.address],
+            token_in: request.token_in,
+            token_out: request.token_out,
         })
     }
 }

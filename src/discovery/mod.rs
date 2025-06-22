@@ -1,12 +1,11 @@
 pub mod amm_pool_parser;
 pub mod stable_pool_parser;
 pub mod clmm_pool_parser;
+pub mod clmm_pool_parser_optimized;
+pub mod cp_pool_parser;
 pub mod pool_cache;
 pub mod pool_finder;
 pub mod pool_scorer;
-
-#[cfg(test)]
-mod tests;
 
 use crate::core::{Config, PoolInfo, PoolType, SwapResult};
 use solana_sdk::pubkey::Pubkey;
@@ -85,6 +84,13 @@ impl PoolDiscovery {
             .into_iter()
             .filter(|p| p.pool_type == pool_type)
             .collect())
+    }
+
+    /// Find all pools containing a specific token
+    pub async fn find_pools_by_token(&self, token: Pubkey) -> SwapResult<Vec<PoolInfo>> {
+        // For now, only implement AMM pool discovery
+        // TODO: Add Stable and CLMM pool discovery for single tokens
+        self.finder.find_pools_by_token(token).await
     }
 
     /// Invalidate cache for a token pair

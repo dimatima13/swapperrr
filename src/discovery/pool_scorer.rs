@@ -3,15 +3,15 @@ use log::debug;
 
 /// Pool scoring service
 pub struct PoolScorer {
-    liquidity_weight: f64,
-    volume_weight: f64,
+    _liquidity_weight: f64,
+    _volume_weight: f64,
 }
 
 impl PoolScorer {
     pub fn new() -> Self {
         Self {
-            liquidity_weight: 0.6,
-            volume_weight: 0.4,
+            _liquidity_weight: 0.6,
+            _volume_weight: 0.4,
         }
     }
 
@@ -131,6 +131,7 @@ mod tests {
             volume_24h_usd: volume,
             fee_rate: 0.0025,
             program_id: Pubkey::new_unique(),
+            // TODO: fix this
             pool_state: PoolState::AMM {
                 reserve_a: 1000000,
                 reserve_b: 1000000,

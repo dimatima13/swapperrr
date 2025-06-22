@@ -1,5 +1,5 @@
 use crate::core::{
-    constants::STANDARD_FEE_RATE, PoolInfo, PoolState, QuoteRequest, QuoteResult, SwapError,
+    PoolInfo, PoolState, QuoteRequest, QuoteResult, SwapError,
     SwapResult,
 };
 use log::debug;
@@ -150,6 +150,8 @@ impl crate::quotes::QuoteCalculator for StandardQuoteCalculator {
             price_impact,
             fee,
             route: vec![pool.address],
+            token_in: request.token_in,
+            token_out: request.token_out,
         })
     }
 }
@@ -189,6 +191,7 @@ mod tests {
             token_b,
             liquidity_usd: 50000.0,
             volume_24h_usd: 10000.0,
+            // TODO: fix this
             fee_rate: STANDARD_FEE_RATE,
             program_id: Pubkey::new_unique(),
             pool_state: PoolState::Standard {

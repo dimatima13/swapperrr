@@ -22,6 +22,12 @@ pub enum Commands {
     
     /// List all available pools for a token pair
     Pools(PoolsArgs),
+    
+    /// Find all pools containing a specific token
+    TokenPools(TokenPoolsArgs),
+    
+    /// Wrap SOL to wSOL or unwrap wSOL to SOL
+    Wrap(WrapArgs),
 }
 
 #[derive(Parser)]
@@ -30,12 +36,12 @@ pub struct QuoteArgs {
     #[arg(value_parser = parse_pubkey)]
     pub token_in: Pubkey,
     
-    /// Output token mint address
-    #[arg(value_parser = parse_pubkey)]
-    pub token_out: Pubkey,
-    
     /// Amount to swap (in token units, considering decimals)
     pub amount: f64,
+    
+    /// Output token mint address (optional, defaults to SOL)
+    #[arg(value_parser = parse_pubkey)]
+    pub token_out: Option<Pubkey>,
     
     /// Slippage tolerance in basis points (default: 50 = 0.5%)
     #[arg(short, long, default_value = "50")]
@@ -52,12 +58,12 @@ pub struct SwapArgs {
     #[arg(value_parser = parse_pubkey)]
     pub token_in: Pubkey,
     
-    /// Output token mint address
-    #[arg(value_parser = parse_pubkey)]
-    pub token_out: Pubkey,
-    
     /// Amount to swap (in token units, considering decimals)
     pub amount: f64,
+    
+    /// Output token mint address (optional, defaults to SOL)
+    #[arg(value_parser = parse_pubkey)]
+    pub token_out: Option<Pubkey>,
     
     /// Slippage tolerance in basis points (default: 50 = 0.5%)
     #[arg(short, long, default_value = "50")]
@@ -66,6 +72,10 @@ pub struct SwapArgs {
     /// Skip confirmation prompt
     #[arg(long)]
     pub yes: bool,
+    
+    /// Automatically find best output token (SOL or USDC)
+    #[arg(long)]
+    pub auto: bool,
 }
 
 #[derive(Parser)]
@@ -81,6 +91,31 @@ pub struct PoolsArgs {
     /// Show detailed pool information
     #[arg(short, long)]
     pub detailed: bool,
+}
+
+#[derive(Parser)]
+pub struct TokenPoolsArgs {
+    /// Token mint address to search for
+    #[arg(value_parser = parse_pubkey)]
+    pub token: Pubkey,
+    
+    /// Show detailed pool information
+    #[arg(short, long)]
+    pub detailed: bool,
+    
+    /// Filter by pool type (amm, stable, clmm)
+    #[arg(long)]
+    pub pool_type: Option<String>,
+}
+
+#[derive(Parser)]
+pub struct WrapArgs {
+    /// Amount of SOL to wrap
+    pub amount: f64,
+    
+    /// Unwrap wSOL back to SOL
+    #[arg(long)]
+    pub unwrap: bool,
 }
 
 fn parse_pubkey(s: &str) -> Result<Pubkey, String> {
