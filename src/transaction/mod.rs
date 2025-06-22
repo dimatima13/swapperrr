@@ -22,6 +22,8 @@ use solana_sdk::{
     message::{VersionedMessage, v0},
     compute_budget::ComputeBudgetInstruction,
 };
+use solana_client::rpc_config::RpcTransactionConfig;
+use solana_transaction_status::UiTransactionEncoding;
 use alt::AltManager;
 use std::str::FromStr;
 use spl_associated_token_account::{get_associated_token_address, instruction::create_associated_token_account};
@@ -519,6 +521,20 @@ impl TransactionExecutor {
         ))
     }
 
+    /// Get transaction with v0 support
+    async fn get_transaction_with_config(
+        &self,
+        signature: &Signature,
+    ) -> Result<solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta, solana_client::client_error::ClientError> {
+        let config = RpcTransactionConfig {
+            encoding: Some(UiTransactionEncoding::Json),
+            commitment: Some(CommitmentConfig::confirmed()),
+            max_supported_transaction_version: Some(0),
+        };
+        
+        self.rpc_client.get_transaction_with_config(signature, config).await
+    }
+
     /// Get actual output amount from transaction
     async fn get_actual_output_amount(&self, signature: &Signature) -> SwapResult<u64> {
         info!("Analyzing transaction output for signature: {}", signature);
@@ -527,10 +543,7 @@ impl TransactionExecutor {
         tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
         
         // Get transaction details with full metadata
-        match self.rpc_client.get_transaction(
-            signature, 
-            solana_transaction_status::UiTransactionEncoding::Json
-        ).await {
+        match self.get_transaction_with_config(signature).await {
             Ok(transaction) => {
                 if let Some(meta) = transaction.transaction.meta {
                     // Parse token balance changes from pre/post token balances

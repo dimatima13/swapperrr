@@ -6,6 +6,8 @@ use solana_sdk::{
     signature::Signature,
     transaction::{Transaction, VersionedTransaction},
 };
+use solana_client::rpc_config::RpcTransactionConfig;
+use solana_transaction_status::UiTransactionEncoding;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
@@ -413,10 +415,14 @@ impl TransactionMonitor {
         &self,
         signature: &Signature,
     ) -> SwapResult<solana_transaction_status::UiTransactionEncoding> {
-        use solana_transaction_status::UiTransactionEncoding;
+        let config = RpcTransactionConfig {
+            encoding: Some(UiTransactionEncoding::Json),
+            commitment: Some(CommitmentConfig::confirmed()),
+            max_supported_transaction_version: Some(0),
+        };
         
         match self.rpc_client
-            .get_transaction(signature, UiTransactionEncoding::Json)
+            .get_transaction_with_config(signature, config)
             .await
         {
             Ok(_transaction) => Ok(UiTransactionEncoding::Json),
@@ -503,7 +509,13 @@ pub mod utils {
         rpc_client: &RpcClient,
         signature: &Signature,
     ) -> SwapResult<u64> {
-        match rpc_client.get_transaction(signature, solana_transaction_status::UiTransactionEncoding::Json).await {
+        let config = RpcTransactionConfig {
+            encoding: Some(UiTransactionEncoding::Json),
+            commitment: Some(CommitmentConfig::confirmed()),
+            max_supported_transaction_version: Some(0),
+        };
+        
+        match rpc_client.get_transaction_with_config(signature, config).await {
             Ok(transaction) => {
                 if let Some(meta) = transaction.transaction.meta {
                     Ok(meta.fee)
@@ -521,7 +533,13 @@ pub mod utils {
         signature: &Signature,
         account: &Pubkey,
     ) -> SwapResult<i64> {
-        match rpc_client.get_transaction(signature, solana_transaction_status::UiTransactionEncoding::Json).await {
+        let config = RpcTransactionConfig {
+            encoding: Some(UiTransactionEncoding::Json),
+            commitment: Some(CommitmentConfig::confirmed()),
+            max_supported_transaction_version: Some(0),
+        };
+        
+        match rpc_client.get_transaction_with_config(signature, config).await {
             Ok(transaction) => {
                 if let Some(_meta) = transaction.transaction.meta {
                     // Parse balance changes from transaction metadata
