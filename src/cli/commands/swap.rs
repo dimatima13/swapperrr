@@ -169,7 +169,15 @@ pub async fn execute(args: SwapArgs) -> SwapResult<()> {
     pb.set_message("Preparing transaction...");
 
     // Create transaction executor
-    let executor = TransactionExecutor::new(config.rpc_url.clone(), keypair);
+    let mut executor = TransactionExecutor::new(config.rpc_url.clone(), keypair);
+    
+    // Set transaction version based on --legacy flag
+    if args.legacy {
+        executor.set_transaction_version(crate::transaction::TransactionVersion::Legacy);
+        info!("Using legacy transaction format");
+    } else {
+        info!("Using v0 transaction format");
+    }
 
     let swap_params = SwapParams {
         quote: quote.clone(),

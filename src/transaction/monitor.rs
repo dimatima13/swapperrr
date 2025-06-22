@@ -4,7 +4,7 @@ use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::{
     commitment_config::CommitmentConfig,
     signature::Signature,
-    transaction::Transaction,
+    transaction::{Transaction, VersionedTransaction},
 };
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
@@ -83,6 +83,64 @@ impl TransactionMonitor {
             monitor_config: monitor_config.unwrap_or_default(),
             retry_config: retry_config.unwrap_or_default(),
         }
+    }
+
+    /// Send versioned transaction with retry logic and monitoring
+    /// Returns (signature, retry_attempts)
+    pub async fn send_and_confirm_versioned_with_retry(
+        &self,
+        mut transaction: VersionedTransaction,
+        signer_keypairs: &[&dyn solana_sdk::signer::Signer],
+    ) -> SwapResult<(Signature, u32)> {
+        let mut attempt = 0;
+        let mut last_error = None;
+
+        while attempt <= self.retry_config.max_retries {
+            if attempt > 0 {
+                // Calculate delay with exponential backoff
+                let delay = self.calculate_retry_delay(attempt);
+                info!("Retrying transaction in {}ms (attempt {}/{})", 
+                      delay, attempt, self.retry_config.max_retries);
+                sleep(Duration::from_millis(delay)).await;
+
+                // Refresh blockhash if configured
+                if self.retry_config.refresh_blockhash {
+                    match self.refresh_versioned_transaction_blockhash(&mut transaction, signer_keypairs).await {
+                        Ok(_) => debug!("Refreshed transaction blockhash"),
+                        Err(e) => {
+                            warn!("Failed to refresh blockhash: {}", e);
+                            last_error = Some(e);
+                            attempt += 1;
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            match self.send_and_monitor_versioned_transaction(&transaction).await {
+                Ok(signature) => {
+                    if attempt > 0 {
+                        info!("Transaction succeeded on retry attempt {}", attempt);
+                    }
+                    return Ok((signature, attempt));
+                }
+                Err(e) => {
+                    error!("Transaction attempt {} failed: {}", attempt + 1, e);
+                    last_error = Some(e);
+                    
+                    // Check if error is retryable
+                    if !self.is_retryable_error(&last_error.as_ref().unwrap()) {
+                        break;
+                    }
+                }
+            }
+
+            attempt += 1;
+        }
+
+        Err(last_error.unwrap_or_else(|| {
+            SwapError::Other("Transaction failed after all retry attempts".to_string())
+        }))
     }
 
     /// Send transaction with retry logic and monitoring
@@ -376,6 +434,62 @@ impl TransactionMonitor {
         // TODO
         debug!("Getting token balance changes for transaction: {}", signature);
         Ok(vec![])
+    }
+
+    /// Send versioned transaction and monitor its status
+    async fn send_and_monitor_versioned_transaction(&self, transaction: &VersionedTransaction) -> SwapResult<Signature> {
+        debug!("Sending versioned transaction...");
+        
+        // Send transaction
+        let signature = self.rpc_client
+            .send_transaction(transaction)
+            .await
+            .map_err(SwapError::RpcError)?;
+
+        info!("Versioned transaction sent: {}", signature);
+
+        // Monitor confirmation
+        self.monitor_confirmation(&signature).await?;
+
+        Ok(signature)
+    }
+
+    /// Refresh versioned transaction blockhash and re-sign
+    async fn refresh_versioned_transaction_blockhash(
+        &self,
+        transaction: &mut VersionedTransaction,
+        signer_keypairs: &[&dyn solana_sdk::signer::Signer],
+    ) -> SwapResult<()> {
+        let recent_blockhash = self.rpc_client
+            .get_latest_blockhash()
+            .await
+            .map_err(SwapError::RpcError)?;
+
+        // Update blockhash in the versioned message
+        match &mut transaction.message {
+            solana_sdk::message::VersionedMessage::Legacy(message) => {
+                message.recent_blockhash = recent_blockhash;
+            }
+            solana_sdk::message::VersionedMessage::V0(_message) => {
+                // For v0 messages, we need to rebuild the transaction
+                // as the blockhash is part of the compiled message
+                return Err(SwapError::Other(
+                    "Cannot refresh blockhash for v0 transactions directly. Rebuild required.".to_string()
+                ));
+            }
+        }
+
+        // Clear and re-sign
+        transaction.signatures.clear();
+        transaction.signatures.resize(signer_keypairs.len(), Default::default());
+        
+        // Sign the transaction
+        for (i, signer) in signer_keypairs.iter().enumerate() {
+            transaction.signatures[i] = signer.sign_message(&transaction.message.serialize());
+        }
+
+        debug!("Versioned transaction blockhash refreshed: {}", recent_blockhash);
+        Ok(())
     }
 }
 

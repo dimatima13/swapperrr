@@ -76,6 +76,10 @@ pub struct SwapArgs {
     /// Automatically find best output token (SOL or USDC)
     #[arg(long)]
     pub auto: bool,
+
+    /// Use legacy transaction format instead of v0
+    #[arg(long)]
+    pub legacy: bool,
 }
 
 #[derive(Parser)]

@@ -17,7 +17,9 @@ use solana_sdk::{
     pubkey::Pubkey,
     signature::{Keypair, Signature},
     signer::Signer,
-    transaction::Transaction,
+    transaction::{Transaction, VersionedTransaction},
+    message::{VersionedMessage, v0},
+    compute_budget::ComputeBudgetInstruction,
 };
 use std::str::FromStr;
 use spl_associated_token_account::{get_associated_token_address, instruction::create_associated_token_account};
@@ -27,11 +29,25 @@ const TOKEN_2022_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
 
 pub use monitor::{TransactionMonitor, MonitorConfig, RetryConfig};
 
+/// Transaction version preference
+#[derive(Debug, Clone, Copy)]
+pub enum TransactionVersion {
+    Legacy,
+    V0,
+}
+
+impl Default for TransactionVersion {
+    fn default() -> Self {
+        TransactionVersion::V0
+    }
+}
+
 /// Transaction executor for different pool types
 pub struct TransactionExecutor {
     rpc_client: RpcClient,
     keypair: Keypair,
     monitor: TransactionMonitor,
+    transaction_version: TransactionVersion,
 }
 
 impl TransactionExecutor {
@@ -51,6 +67,7 @@ impl TransactionExecutor {
             rpc_client,
             keypair,
             monitor,
+            transaction_version: TransactionVersion::default(),
         }
     }
 
@@ -75,9 +92,68 @@ impl TransactionExecutor {
             rpc_client,
             keypair,
             monitor,
+            transaction_version: TransactionVersion::default(),
         }
     }
-    
+
+    /// Set transaction version preference
+    pub fn set_transaction_version(&mut self, version: TransactionVersion) {
+        self.transaction_version = version;
+    }
+
+    /// Create compute budget instructions
+    fn create_compute_budget_instructions(compute_units: Option<u32>, priority_fee: Option<u64>) -> Vec<Instruction> {
+        let mut instructions = vec![];
+        
+        // Add compute unit limit if specified
+        if let Some(units) = compute_units {
+            instructions.push(ComputeBudgetInstruction::set_compute_unit_limit(units));
+        }
+        
+        // Add priority fee if specified
+        if let Some(fee) = priority_fee {
+            instructions.push(ComputeBudgetInstruction::set_compute_unit_price(fee));
+        }
+        
+        instructions
+    }
+
+    /// Build a versioned transaction (v0)
+    async fn build_versioned_transaction(
+        &self,
+        instructions: Vec<Instruction>,
+        payer: &Pubkey,
+        signers: &[&Keypair],
+    ) -> SwapResult<VersionedTransaction> {
+        // Get recent blockhash
+        let recent_blockhash = self.rpc_client.get_latest_blockhash().await
+            .map_err(SwapError::RpcError)?;
+
+        // Add compute budget instructions at the beginning
+        let mut all_instructions = Self::create_compute_budget_instructions(
+            Some(400_000), // Default compute units
+            Some(1_000),   // Default priority fee (1000 microlamports)
+        );
+        all_instructions.extend(instructions);
+
+        // Create v0 message
+        let message = v0::Message::try_compile(
+            payer,
+            &all_instructions,
+            &[], // No address lookup tables for now
+            recent_blockhash,
+        ).map_err(|e| SwapError::Other(format!("Failed to compile v0 message: {}", e)))?;
+
+        // Create versioned message
+        let versioned_message = VersionedMessage::V0(message);
+
+        // Create versioned transaction
+        let transaction = VersionedTransaction::try_new(versioned_message, signers)
+            .map_err(|e| SwapError::Other(format!("Failed to create versioned transaction: {}", e)))?;
+
+        Ok(transaction)
+    }
+
     /// Determine which token program owns a mint
     async fn get_token_program_for_mint(&self, mint: &Pubkey) -> SwapResult<Pubkey> {
         match self.rpc_client.get_account(mint).await {
@@ -169,38 +245,72 @@ impl TransactionExecutor {
             instructions.push(unwrap_ix);
         }
 
-        // Get recent blockhash
-        let recent_blockhash = self.rpc_client.get_latest_blockhash().await?;
-
-        // Create transaction
-        let mut transaction = Transaction::new_with_payer(
-            &instructions,
-            Some(&self.keypair.pubkey()),
-        );
-        transaction.sign(&[&self.keypair], recent_blockhash);
-
-        // Simulate transaction first
-        debug!("Simulating transaction...");
-        match self.rpc_client.simulate_transaction(&transaction).await {
-            Ok(result) => {
-                if let Some(err) = result.value.err {
-                    return Err(SwapError::SimulationFailed(format!("{:?}", err)));
-                }
-                debug!("Simulation successful");
-            }
-            Err(e) => {
-                return Err(SwapError::SimulationFailed(e.to_string()));
-            }
-        }
-
-        // Send transaction with monitoring and retry logic
-        info!("Sending transaction with monitoring and retry...");
+        // Create transaction based on version preference
         let start_time = std::time::Instant::now();
-        
-        let (signature, retry_attempts) = self
-            .monitor
-            .send_and_confirm_with_retry(&mut transaction, &[&self.keypair])
-            .await?;
+        let (signature, retry_attempts) = match self.transaction_version {
+            TransactionVersion::V0 => {
+                info!("Creating v0 transaction");
+                let transaction = self.build_versioned_transaction(
+                    instructions,
+                    &self.keypair.pubkey(),
+                    &[&self.keypair],
+                ).await?;
+
+                // Simulate versioned transaction first
+                debug!("Simulating v0 transaction...");
+                match self.rpc_client.simulate_transaction(&transaction).await {
+                    Ok(result) => {
+                        if let Some(err) = result.value.err {
+                            return Err(SwapError::SimulationFailed(format!("{:?}", err)));
+                        }
+                        debug!("Simulation successful");
+                    }
+                    Err(e) => {
+                        return Err(SwapError::SimulationFailed(e.to_string()));
+                    }
+                }
+
+                // Send versioned transaction with monitoring and retry logic
+                info!("Sending v0 transaction with monitoring and retry...");
+                
+                self.monitor
+                    .send_and_confirm_versioned_with_retry(transaction, &[&self.keypair])
+                    .await?
+            }
+            TransactionVersion::Legacy => {
+                info!("Creating legacy transaction");
+                // Get recent blockhash
+                let recent_blockhash = self.rpc_client.get_latest_blockhash().await?;
+
+                // Create legacy transaction
+                let mut transaction = Transaction::new_with_payer(
+                    &instructions,
+                    Some(&self.keypair.pubkey()),
+                );
+                transaction.sign(&[&self.keypair], recent_blockhash);
+
+                // Simulate transaction first
+                debug!("Simulating legacy transaction...");
+                match self.rpc_client.simulate_transaction(&transaction).await {
+                    Ok(result) => {
+                        if let Some(err) = result.value.err {
+                            return Err(SwapError::SimulationFailed(format!("{:?}", err)));
+                        }
+                        debug!("Simulation successful");
+                    }
+                    Err(e) => {
+                        return Err(SwapError::SimulationFailed(e.to_string()));
+                    }
+                }
+
+                // Send transaction with monitoring and retry logic
+                info!("Sending legacy transaction with monitoring and retry...");
+                
+                self.monitor
+                    .send_and_confirm_with_retry(&mut transaction, &[&self.keypair])
+                    .await?
+            }
+        };
 
         let confirmation_time = start_time.elapsed().as_millis() as u64;
         info!("Transaction confirmed in {}ms: {}", confirmation_time, signature);
