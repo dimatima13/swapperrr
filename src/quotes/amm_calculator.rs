@@ -176,7 +176,7 @@ impl Default for AmmQuoteCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{PoolType, TokenInfo};
+    use crate::core::{PoolType, TokenInfo, AMM_FEE_RATE};
     use crate::quotes::QuoteCalculator;
     use solana_sdk::pubkey::Pubkey;
 
@@ -208,6 +208,7 @@ mod tests {
             pool_state: PoolState::AMM {
                 reserve_a,
                 reserve_b,
+                nonce: 1,
             },
         }
     }

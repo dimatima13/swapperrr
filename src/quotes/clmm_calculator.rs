@@ -234,7 +234,7 @@ mod tests {
 
     fn create_test_clmm_pool(
         current_tick: i32,
-        _tick_spacing: u16,
+        tick_spacing: u16,
         liquidity: u128,
         fee_tier: u32,
     ) -> PoolInfo {
@@ -351,7 +351,7 @@ mod tests {
             
             // Higher fee tier should result in less output
             let expected_fee = 1_000_000 * fee_tier / 1_000_000;
-            let amount_after_fee = 1_000_000 - expected_fee;
+            let _amount_after_fee = 1_000_000 - expected_fee;
             
             assert!(output < 1_000_000);
         }

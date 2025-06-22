@@ -141,7 +141,6 @@ fn get_associated_token_address(wallet: &Pubkey, mint: &Pubkey) -> Pubkey {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{QuoteResult, PoolInfo, PoolType, TokenInfo};
     
     #[test]
     fn test_stable_swap_instruction_serialization() {

@@ -211,13 +211,6 @@ mod tests {
     use crate::core::{Config, PoolState, TokenInfo};
     use solana_sdk::pubkey::Pubkey;
 
-    async fn create_test_selector() -> PoolSelector {
-        let config = Config::default();
-        let discovery = Arc::new(PoolDiscovery::new(config).unwrap());
-        let quote_engine = Arc::new(QuoteEngine::new());
-
-        PoolSelector::new(discovery, quote_engine)
-    }
 
     fn create_test_quote(pool_type: PoolType, amount_out: u64) -> QuoteResult {
         let pool_info = PoolInfo {
@@ -239,22 +232,39 @@ mod tests {
             volume_24h_usd: 50000.0,
             fee_rate: 0.0025,
             program_id: Pubkey::new_unique(),
-            // TODO: fix this
-            pool_state: PoolState::AMM {
-                reserve_a: 1000000,
-                reserve_b: 1000000,
+            pool_state: match pool_type {
+                PoolType::AMM => PoolState::AMM {
+                    reserve_a: 1000000,
+                    reserve_b: 1000000,
+                    nonce: 1,
+                },
+                PoolType::Stable => PoolState::Stable {
+                    reserves: vec![1000000, 1000000],
+                    amp_factor: 1000,
+                },
+                PoolType::CLMM => PoolState::CLMM {
+                    current_tick: 0,
+                    tick_spacing: 64,
+                    liquidity: 1000000,
+                    fee_tier: 250,
+                },
+                PoolType::Standard => PoolState::Standard {
+                    reserve_a: 1000000,
+                    reserve_b: 1000000,
+                },
             },
         };
 
-        // TODO: fix
         QuoteResult {
-            pool_info,
+            pool_info: pool_info.clone(),
             amount_in: 1000,
             amount_out,
             min_amount_out: amount_out * 99 / 100,
             price_impact: 0.1,
             fee: 2,
             route: vec![Pubkey::new_unique()],
+            token_in: pool_info.token_a.mint,
+            token_out: pool_info.token_b.mint,
         }
     }
 

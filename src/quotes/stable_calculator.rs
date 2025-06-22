@@ -245,7 +245,7 @@ impl Default for StableQuoteCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{PoolType, TokenInfo};
+    use crate::core::{PoolType, TokenInfo, STABLE_FEE_RATE};
     use crate::quotes::QuoteCalculator;
     use solana_sdk::pubkey::Pubkey;
 

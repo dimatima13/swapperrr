@@ -7,9 +7,6 @@ edition = "2021"
 name = "raydium-multipool-swap"
 path = "src/main.rs"
 
-[[bin]]
-name = "check_tx"
-path = "check_tx.rs"
 
 [dependencies]
 # Solana
