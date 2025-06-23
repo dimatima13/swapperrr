@@ -281,4 +281,16 @@ impl CpSwapPoolState {
     pub fn is_active(&self) -> bool {
         self.status == 1
     }
+    
+    /// Parse from raw bytes
+    pub fn from_bytes(data: &[u8]) -> Result<Self, String> {
+        use borsh::BorshDeserialize;
+        
+        if data.len() != Self::LEN {
+            return Err(format!("Invalid CP pool data length: {} (expected {})", data.len(), Self::LEN));
+        }
+        
+        Self::try_from_slice(data)
+            .map_err(|e| format!("Failed to deserialize CP pool state: {}", e))
+    }
 }

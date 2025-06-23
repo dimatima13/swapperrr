@@ -84,6 +84,10 @@ pub struct SwapArgs {
     /// Use Address Lookup Tables (ALT) for transaction optimization
     #[arg(long)]
     pub use_alt: bool,
+    
+    /// Show detailed balance changes after swap
+    #[arg(long)]
+    pub show_balance_changes: bool,
 }
 
 #[derive(Parser)]

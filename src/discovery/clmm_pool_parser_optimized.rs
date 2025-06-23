@@ -308,12 +308,9 @@ impl OptimizedClmmPoolParser {
             return Ok(info.clone());
         }
 
-        // Use token metadata fetcher
-        let fetcher = crate::core::token_metadata::TokenMetadataFetcher::new(
-            self.rpc_url.clone()
-        );
-        
-        match fetcher.get_token_metadata(mint) {
+        // Use async token metadata fetcher
+        let fetcher = crate::core::AsyncTokenMetadataFetcher::new(self.rpc_client.clone());
+        match fetcher.get_token_metadata(mint).await {
             Ok(info) => {
                 self.token_cache.insert(*mint, info.clone());
                 Ok(info)

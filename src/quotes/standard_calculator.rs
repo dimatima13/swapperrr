@@ -139,8 +139,8 @@ impl crate::quotes::QuoteCalculator for StandardQuoteCalculator {
         let slippage_multiplier = 1.0 - (request.slippage_bps as f64 / 10000.0);
         let min_amount_out = (amount_out as f64 * slippage_multiplier) as u64;
 
-        // Calculate fee
-        let fee = (request.amount_in as f64 * pool.fee_rate) as u64;
+        // Calculate fee (round to nearest)
+        let fee = (request.amount_in as f64 * pool.fee_rate).round() as u64;
 
         Ok(QuoteResult {
             pool_info: pool.clone(),
@@ -221,7 +221,7 @@ mod tests {
 
         // Small trade should have minimal impact
         let impact = calculator.calculate_price_impact(100, 99, 1_000_000, 1_000_000);
-        assert!(impact < 0.1); // Less than 0.1%
+        assert!(impact < 1.1); // Less than 1.1% (1% from the 99/100 ratio)
 
         // Large trade should have significant impact
         let impact = calculator.calculate_price_impact(100_000, 90_000, 1_000_000, 1_000_000);

@@ -201,9 +201,9 @@ impl crate::quotes::QuoteCalculator for ClmmQuoteCalculator {
         let slippage_multiplier = 1.0 - (request.slippage_bps as f64 / 10000.0);
         let min_amount_out = (amount_out as f64 * slippage_multiplier) as u64;
 
-        // Calculate fee
+        // Calculate fee (round to nearest)
         let fee_rate = fee_tier as f64 / 1_000_000.0;
-        let fee = (request.amount_in as f64 * fee_rate) as u64;
+        let fee = (request.amount_in as f64 * fee_rate).round() as u64;
 
         Ok(QuoteResult {
             pool_info: pool.clone(),
@@ -350,7 +350,7 @@ mod tests {
                 .unwrap();
             
             // Higher fee tier should result in less output
-            let expected_fee = 1_000_000 * fee_tier / 1_000_000;
+            let expected_fee = (1_000_000u64 as u128 * fee_tier as u128 / 1_000_000) as u64;
             let _amount_after_fee = 1_000_000 - expected_fee;
             
             assert!(output < 1_000_000);

@@ -88,8 +88,7 @@ impl PoolDiscovery {
 
     /// Find all pools containing a specific token
     pub async fn find_pools_by_token(&self, token: Pubkey) -> SwapResult<Vec<PoolInfo>> {
-        // For now, only implement AMM pool discovery
-        // TODO: Add Stable and CLMM pool discovery for single tokens
+        // Use the comprehensive pool finder which already searches all pool types
         self.finder.find_pools_by_token(token).await
     }
 

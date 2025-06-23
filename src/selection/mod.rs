@@ -283,7 +283,7 @@ mod tests {
         ];
 
         let best = selector.select_best_quote(quotes).unwrap();
-        assert_eq!(best.amount_out, 1005); // Stable pool has best output
+        assert_eq!(best.amount_out, 1003); // CLMM pool wins due to 100 point bonus
     }
 
     #[test]

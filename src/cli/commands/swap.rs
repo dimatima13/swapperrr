@@ -10,7 +10,7 @@ use dialoguer::{theme::ColorfulTheme, Confirm, Password};
 use log::{info, warn};
 use solana_sdk::{
     pubkey::Pubkey,
-    signature::{Keypair, Signer},
+    signature::{Keypair, Signature, Signer},
     signer::SeedDerivable,
 };
 use std::str::FromStr;
@@ -52,10 +52,11 @@ pub async fn execute(args: SwapArgs) -> SwapResult<()> {
     }
 
     // Convert amount to smallest units based on token decimals
-    // For now, assume 6 decimals for pump tokens, 9 for SOL
-    // TODO: Get actual decimals from token metadata
-    let decimals = if args.token_in == sol_mint { 9 } else { 6 };
-    let amount_in = (args.amount * 10f64.powi(decimals)) as u64;
+    let decimals = crate::core::get_token_decimals(
+        &solana_client::rpc_client::RpcClient::new(config.rpc_url.clone()),
+        &args.token_in
+    )?;
+    let amount_in = (args.amount * 10f64.powi(decimals as i32)) as u64;
 
     let request = QuoteRequest {
         token_in: args.token_in,
@@ -217,6 +218,46 @@ pub async fn execute(args: SwapArgs) -> SwapResult<()> {
                 result.actual_slippage,
                 output_token,
             );
+            
+            // Optionally show balance changes
+            if args.show_balance_changes {
+                println!("\n{}", style("💰 Balance Changes:").bold().blue());
+                
+                // Create a new transaction monitor to analyze balance changes
+                let monitor = crate::transaction::TransactionMonitor::new(
+                    config.rpc_url.clone(),
+                    None,
+                    None,
+                );
+                
+                match monitor.analyze_balance_changes(&Signature::from_str(&result.signature).unwrap()).await {
+                    Ok(changes) => {
+                        for change in changes {
+                            let symbol = if let Some(mint) = change.mint {
+                                // Try to find token symbol from pool info
+                                if mint == quote.pool_info.token_a.mint {
+                                    quote.pool_info.token_a.symbol.clone()
+                                } else if mint == quote.pool_info.token_b.mint {
+                                    quote.pool_info.token_b.symbol.clone()
+                                } else {
+                                    mint.to_string()[..8].to_string()
+                                }
+                            } else {
+                                "SOL".to_string()
+                            };
+                            
+                            let ui_change = change.change as f64 / 10f64.powi(change.decimals as i32);
+                            let arrow = if change.change > 0 { "⬆" } else { "⬇" };
+                            let color = if change.change > 0 { style(format!("{:.6}", ui_change)).green() } else { style(format!("{:.6}", ui_change)).red() };
+                            
+                            println!("  {} {} {}: {}", arrow, symbol, change.account.to_string()[..8].to_string(), color);
+                        }
+                    }
+                    Err(e) => {
+                        println!("  {} {}", style("⚠").yellow(), style(format!("Could not fetch balance changes: {}", e)).dim());
+                    }
+                }
+            }
             
             println!(
                 "\n{}",

@@ -5,11 +5,30 @@ use solana_sdk::{
     commitment_config::CommitmentConfig,
     signature::Signature,
     transaction::{Transaction, VersionedTransaction},
+    pubkey::Pubkey,
 };
 use solana_client::rpc_config::RpcTransactionConfig;
 use solana_transaction_status::UiTransactionEncoding;
 use std::time::{Duration, Instant};
+use std::str::FromStr;
 use tokio::time::sleep;
+
+/// Balance change information for an account
+#[derive(Debug, Clone)]
+pub struct BalanceChange {
+    /// Account address
+    pub account: Pubkey,
+    /// Token mint (None for native SOL)
+    pub mint: Option<Pubkey>,
+    /// Balance before transaction
+    pub pre_balance: u64,
+    /// Balance after transaction
+    pub post_balance: u64,
+    /// Change amount (can be negative)
+    pub change: i64,
+    /// Token decimals
+    pub decimals: u8,
+}
 
 /// Transaction status monitoring configuration
 #[derive(Debug, Clone)]
@@ -352,6 +371,23 @@ impl TransactionMonitor {
         delay.min(self.retry_config.max_delay_ms)
     }
 
+    /// Analyze balance changes for a confirmed transaction
+    pub async fn analyze_balance_changes(
+        &self,
+        signature: &Signature,
+    ) -> SwapResult<Vec<BalanceChange>> {
+        utils::get_all_balance_changes(&self.rpc_client, signature).await
+    }
+
+    /// Get balance change for a specific account
+    pub async fn get_balance_change_for_account(
+        &self,
+        signature: &Signature,
+        account: &Pubkey,
+    ) -> SwapResult<i64> {
+        utils::get_account_balance_change(&self.rpc_client, signature, account).await
+    }
+
     /// Check if error is retryable
     fn is_retryable_error(&self, error: &SwapError) -> bool {
         match error {
@@ -541,12 +577,165 @@ pub mod utils {
         
         match rpc_client.get_transaction_with_config(signature, config).await {
             Ok(transaction) => {
-                if let Some(_meta) = transaction.transaction.meta {
+                if let Some(meta) = transaction.transaction.meta {
                     // Parse balance changes from transaction metadata
-                    // This is a simplified implementation
-                    // TODO: Implement actual balance change analysis
-                    debug!("Analyzing balance changes for account: {}", account);
-                    Ok(0) // Placeholder
+                    use solana_transaction_status::option_serializer::OptionSerializer;
+                    
+                    // Check token balance changes
+                    let (pre_balances, post_balances) = match (&meta.pre_token_balances, &meta.post_token_balances) {
+                        (OptionSerializer::Some(pre), OptionSerializer::Some(post)) => (pre, post),
+                        _ => {
+                            debug!("No token balance data available for transaction");
+                            return Ok(0);
+                        }
+                    };
+                    
+                    // Find the account in the token balances
+                    for post_balance in post_balances {
+                        // Check if this is the account we're looking for
+                        if let OptionSerializer::Some(owner) = &post_balance.owner {
+                            if owner == &account.to_string() {
+                                // Find corresponding pre-balance
+                                if let Some(pre_balance) = pre_balances.iter()
+                                    .find(|pb| pb.account_index == post_balance.account_index) {
+                                    
+                                    let pre_amount = pre_balance.ui_token_amount.amount.parse::<i64>().unwrap_or(0);
+                                    let post_amount = post_balance.ui_token_amount.amount.parse::<i64>().unwrap_or(0);
+                                    let change = post_amount - pre_amount;
+                                    
+                                    debug!("Account {} balance change: {} -> {} (change: {})", 
+                                        account, pre_amount, post_amount, change);
+                                    
+                                    return Ok(change);
+                                } else {
+                                    // New token account created
+                                    let post_amount = post_balance.ui_token_amount.amount.parse::<i64>().unwrap_or(0);
+                                    debug!("New token account {} created with balance: {}", account, post_amount);
+                                    return Ok(post_amount);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Also check SOL balance changes if no token balance found
+                    let pre_sol = &meta.pre_balances;
+                    let post_sol = &meta.post_balances;
+                    
+                    // Find account index
+                    match &transaction.transaction.transaction {
+                            solana_transaction_status::EncodedTransaction::Json(tx) => {
+                                match &tx.message {
+                                    solana_transaction_status::UiMessage::Raw(raw_msg) => {
+                                        let account_keys = &raw_msg.account_keys;
+                                        for (idx, key) in account_keys.iter().enumerate() {
+                                            if key == &account.to_string() {
+                                                if idx < pre_sol.len() && idx < post_sol.len() {
+                                                    let change = post_sol[idx] as i64 - pre_sol[idx] as i64;
+                                                    debug!("Account {} SOL balance change: {}", account, change);
+                                                    return Ok(change);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            _ => {}
+                        }
+                    
+                    debug!("No balance change found for account: {}", account);
+                    Ok(0)
+                } else {
+                    Err(SwapError::Other("No transaction metadata available".to_string()))
+                }
+            }
+            Err(e) => Err(SwapError::RpcError(e)),
+        }
+    }
+
+    /// Get all balance changes in a transaction
+    pub async fn get_all_balance_changes(
+        rpc_client: &RpcClient,
+        signature: &Signature,
+    ) -> SwapResult<Vec<BalanceChange>> {
+        let config = RpcTransactionConfig {
+            encoding: Some(UiTransactionEncoding::Json),
+            commitment: Some(CommitmentConfig::confirmed()),
+            max_supported_transaction_version: Some(0),
+        };
+        
+        let mut balance_changes = Vec::new();
+        
+        match rpc_client.get_transaction_with_config(signature, config).await {
+            Ok(transaction) => {
+                if let Some(meta) = transaction.transaction.meta {
+                    use solana_transaction_status::option_serializer::OptionSerializer;
+                    
+                    // Get account keys
+                    let account_keys: Vec<String> = match &transaction.transaction.transaction {
+                            solana_transaction_status::EncodedTransaction::Json(json_tx) => {
+                                match &json_tx.message {
+                                    solana_transaction_status::UiMessage::Parsed(_) => vec![],
+                                    solana_transaction_status::UiMessage::Raw(raw_msg) => {
+                                        raw_msg.account_keys.clone()
+                                    }
+                                }
+                            }
+                            _ => vec![]
+                        };
+                    
+                    // Parse token balance changes
+                    if let (OptionSerializer::Some(pre_token), OptionSerializer::Some(post_token)) = 
+                        (&meta.pre_token_balances, &meta.post_token_balances) {
+                        
+                        for post_balance in post_token {
+                            let pre_balance = pre_token.iter()
+                                .find(|pb| pb.account_index == post_balance.account_index);
+                            
+                            let pre_amount = pre_balance
+                                .map(|pb| pb.ui_token_amount.amount.parse::<i64>().unwrap_or(0))
+                                .unwrap_or(0);
+                            let post_amount = post_balance.ui_token_amount.amount.parse::<i64>().unwrap_or(0);
+                            let change = post_amount - pre_amount;
+                            
+                            if change != 0 {
+                                let account_pubkey = account_keys.get(post_balance.account_index as usize)
+                                    .and_then(|s| Pubkey::from_str(s).ok())
+                                    .unwrap_or_default();
+                                
+                                balance_changes.push(BalanceChange {
+                                    account: account_pubkey,
+                                    mint: Pubkey::from_str(&post_balance.mint).ok(),
+                                    pre_balance: pre_amount as u64,
+                                    post_balance: post_amount as u64,
+                                    change,
+                                    decimals: post_balance.ui_token_amount.decimals,
+                                });
+                            }
+                        }
+                    }
+                    
+                    // Parse SOL balance changes
+                    let pre_sol = &meta.pre_balances;
+                    let post_sol = &meta.post_balances;
+                    
+                    for (idx, (pre, post)) in pre_sol.iter().zip(post_sol.iter()).enumerate() {
+                        let change = *post as i64 - *pre as i64;
+                        if change != 0 && idx < account_keys.len() {
+                            if let Ok(account) = Pubkey::from_str(&account_keys[idx]) {
+                                balance_changes.push(BalanceChange {
+                                    account,
+                                    mint: None, // Native SOL
+                                    pre_balance: *pre,
+                                    post_balance: *post,
+                                    change,
+                                    decimals: 9, // SOL has 9 decimals
+                                });
+                            }
+                        }
+                    }
+                    
+                    Ok(balance_changes)
                 } else {
                     Err(SwapError::Other("No transaction metadata available".to_string()))
                 }

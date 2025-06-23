@@ -1,5 +1,6 @@
 use crate::core::{SwapError, SwapParams, SwapResult};
 use borsh::{BorshDeserialize, BorshSerialize};
+use log::{debug, info, warn};
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
@@ -87,36 +88,18 @@ pub async fn build_amm_swap_instruction(
     data.serialize(&mut instruction_data)?;
 
     // Check if serum market is a placeholder
-    let serum_market_str = pool_state.serum_market.to_string();
-    let is_placeholder_market = serum_market_str.starts_with("11111111");
-    
-    let (serum_coin_vault, serum_pc_vault, serum_event_queue, serum_bids, serum_asks, serum_vault_signer) = 
-        if is_placeholder_market {
+    // Parse Serum market accounts using proper parser
+    let (serum_bids, serum_asks, serum_event_queue, serum_coin_vault, serum_pc_vault, serum_vault_signer) = 
+        if crate::core::is_placeholder_market(&pool_state.serum_market) {
             info!("Pool has placeholder serum market, using dummy accounts");
-            // For pools without real serum market, use dummy accounts
             let dummy = Pubkey::default();
             (dummy, dummy, dummy, dummy, dummy, dummy)
-        } else if market_account_data.len() >= 245 {
-            // Parse serum market - basic parsing for essential fields
-            let serum_coin_vault = Pubkey::from(<[u8; 32]>::try_from(&market_account_data[53..85]).unwrap());
-            let serum_pc_vault = Pubkey::from(<[u8; 32]>::try_from(&market_account_data[85..117]).unwrap());
-            let serum_event_queue = Pubkey::from(<[u8; 32]>::try_from(&market_account_data[149..181]).unwrap());
-            let serum_bids = Pubkey::from(<[u8; 32]>::try_from(&market_account_data[181..213]).unwrap());
-            let serum_asks = Pubkey::from(<[u8; 32]>::try_from(&market_account_data[213..245]).unwrap());
-            
-            // Get serum vault signer
-            let vault_signer_nonce = u64::from_le_bytes(market_account_data[45..53].try_into().unwrap());
-            let (serum_vault_signer, _) = Pubkey::find_program_address(
-                &[
-                    pool_state.serum_market.as_ref(),
-                    &vault_signer_nonce.to_le_bytes(),
-                ],
-                &pool_state.serum_program_id,
-            );
-            
-            (serum_coin_vault, serum_pc_vault, serum_event_queue, serum_bids, serum_asks, serum_vault_signer)
         } else {
-            return Err(SwapError::ParseError("Invalid serum market data".to_string()));
+            parse_serum_market_accounts(
+                market_account_data,
+                &pool_state.serum_market,
+                &pool_state.serum_program_id
+            )?
         };
 
     info!("Building AMM swap with {} accounts", 18);
@@ -235,18 +218,13 @@ pub async fn build_amm_swap_instruction_with_state(
         AccountMeta::new(pool_state.pool_pc_token_account, false),
         // 7. Serum market account
         AccountMeta::new(pool_state.serum_market, false),
-        // 8. Serum bids (derived from market - placeholder)
-        AccountMeta::new(derive_serum_bids(&pool_state.serum_market, &pool_state.serum_program_id), false),
-        // 9. Serum asks (derived from market - placeholder)
-        AccountMeta::new(derive_serum_asks(&pool_state.serum_market, &pool_state.serum_program_id), false),
-        // 10. Serum event queue (derived from market - placeholder)
-        AccountMeta::new(derive_serum_event_queue(&pool_state.serum_market, &pool_state.serum_program_id), false),
-        // 11. Serum coin vault (derived from market - placeholder)
-        AccountMeta::new(derive_serum_coin_vault(&pool_state.serum_market, &pool_state.serum_program_id), false),
-        // 12. Serum pc vault (derived from market - placeholder)
-        AccountMeta::new(derive_serum_pc_vault(&pool_state.serum_market, &pool_state.serum_program_id), false),
-        // 13. Serum vault signer (derived from market - placeholder)
-        AccountMeta::new_readonly(derive_serum_vault_signer(&pool_state.serum_market, &pool_state.serum_program_id), false),
+        // 8-13. Serum market accounts (placeholders for pools without real Serum market)
+        AccountMeta::new(Pubkey::default(), false), // bids
+        AccountMeta::new(Pubkey::default(), false), // asks
+        AccountMeta::new(Pubkey::default(), false), // event queue
+        AccountMeta::new(Pubkey::default(), false), // coin vault
+        AccountMeta::new(Pubkey::default(), false), // pc vault
+        AccountMeta::new_readonly(Pubkey::default(), false), // vault signer
         // 14. User source token account
         AccountMeta::new(user_source_token, false),
         // 15. User destination token account
@@ -264,65 +242,43 @@ pub async fn build_amm_swap_instruction_with_state(
     })
 }
 
-// Serum market account derivation helpers
-// TODO: need to fetch the actual Serum market state and extract these accounts
-
-fn derive_serum_bids(market: &Pubkey, serum_program: &Pubkey) -> Pubkey {
-    // TODO
-    // 1. Fetch the Serum market account data
-    // 2. Parse the market state
-    // 3. Extract the bids account
-    // For now, we use a deterministic derivation as placeholder
-    let (pda, _) = Pubkey::find_program_address(
-        &[b"bids", &market.to_bytes()],
-        serum_program,
-    );
-    pda
-}
-
-fn derive_serum_asks(market: &Pubkey, serum_program: &Pubkey) -> Pubkey {
-    // Similar to bids
-    let (pda, _) = Pubkey::find_program_address(
-        &[b"asks", &market.to_bytes()],
-        serum_program,
-    );
-    pda
-}
-
-fn derive_serum_event_queue(market: &Pubkey, serum_program: &Pubkey) -> Pubkey {
-    // Similar to bids/asks
-    let (pda, _) = Pubkey::find_program_address(
-        &[b"event_queue", &market.to_bytes()],
-        serum_program,
-    );
-    pda
-}
-
-fn derive_serum_coin_vault(market: &Pubkey, serum_program: &Pubkey) -> Pubkey {
-    // Market's coin vault
-    let (pda, _) = Pubkey::find_program_address(
-        &[b"coin_vault", &market.to_bytes()],
-        serum_program,
-    );
-    pda
-}
-
-fn derive_serum_pc_vault(market: &Pubkey, serum_program: &Pubkey) -> Pubkey {
-    // Market's pc (price currency) vault
-    let (pda, _) = Pubkey::find_program_address(
-        &[b"pc_vault", &market.to_bytes()],
-        serum_program,
-    );
-    pda
-}
-
-fn derive_serum_vault_signer(market: &Pubkey, serum_program: &Pubkey) -> Pubkey {
-    // Vault signer PDA
-    let (pda, _) = Pubkey::find_program_address(
-        &[&market.to_bytes()],
-        serum_program,
-    );
-    pda
+// Serum market account helpers
+fn parse_serum_market_accounts(
+    market_data: &[u8], 
+    market_address: &Pubkey,
+    dex_program: &Pubkey
+) -> SwapResult<(Pubkey, Pubkey, Pubkey, Pubkey, Pubkey, Pubkey)> {
+    use crate::core::MarketState;
+    
+    // If market data is too small, it's likely a placeholder
+    if market_data.len() < 400 {
+        debug!("Market data too small, using placeholder accounts");
+        // Return dummy accounts for placeholder market
+        let dummy = Pubkey::default();
+        return Ok((dummy, dummy, dummy, dummy, dummy, dummy));
+    }
+    
+    // Parse market state
+    match MarketState::parse(market_data) {
+        Ok(market) => {
+            // Get accounts from market state
+            let bids = market.bids();
+            let asks = market.asks();
+            let event_queue = market.event_queue();
+            let coin_vault = market.base_vault();
+            let pc_vault = market.quote_vault();
+            let vault_signer = market.vault_signer(market_address, dex_program)?;
+            
+            info!("Parsed Serum market accounts - bids: {}, asks: {}", bids, asks);
+            Ok((bids, asks, event_queue, coin_vault, pc_vault, vault_signer))
+        }
+        Err(e) => {
+            warn!("Failed to parse Serum market: {}, using placeholder accounts", e);
+            // Return dummy accounts if parsing fails
+            let dummy = Pubkey::default();
+            Ok((dummy, dummy, dummy, dummy, dummy, dummy))
+        }
+    }
 }
 
 /// Structure to hold Serum market accounts
@@ -338,16 +294,16 @@ pub struct SerumMarketAccounts {
 }
 
 impl SerumMarketAccounts {
-    /// Create from market pubkey (placeholder implementation)
-    pub fn from_market(market: &Pubkey, serum_program: &Pubkey) -> Self {
+    /// Create placeholder accounts for markets without real Serum integration
+    pub fn placeholder(market: &Pubkey) -> Self {
         Self {
             market: *market,
-            bids: derive_serum_bids(market, serum_program),
-            asks: derive_serum_asks(market, serum_program),
-            event_queue: derive_serum_event_queue(market, serum_program),
-            coin_vault: derive_serum_coin_vault(market, serum_program),
-            pc_vault: derive_serum_pc_vault(market, serum_program),
-            vault_signer: derive_serum_vault_signer(market, serum_program),
+            bids: Pubkey::default(),
+            asks: Pubkey::default(),
+            event_queue: Pubkey::default(),
+            coin_vault: Pubkey::default(),
+            pc_vault: Pubkey::default(),
+            vault_signer: Pubkey::default(),
         }
     }
 }

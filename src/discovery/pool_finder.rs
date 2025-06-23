@@ -41,8 +41,7 @@ impl PoolDiscoveryService {
             Box::new(AmmPoolFinder::new(rpc_client.clone(), config.rpc_url.clone())),
             Box::new(StablePoolFinder::new(rpc_client.clone())),
             Box::new(ClmmPoolFinder::new(rpc_client.clone(), config.rpc_url.clone())),
-            Box::new(StandardPoolFinder::new(rpc_client.clone())),
-            Box::new(CpPoolFinder::new(rpc_client.clone())),
+            Box::new(StandardPoolFinder::new(rpc_client.clone())), // This now handles CP pools
         ];
 
         Ok(Self {
@@ -170,14 +169,16 @@ impl PoolFinder for ClmmPoolFinder {
     }
 }
 
-/// Standard Pool Finder
+/// Standard Pool Finder (delegates to CP pool finder since they're the same)
 struct StandardPoolFinder {
-    _rpc_client: Arc<RpcClient>,
+    cp_finder: CpPoolFinder,
 }
 
 impl StandardPoolFinder {
     fn new(rpc_client: Arc<RpcClient>) -> Self {
-        Self { _rpc_client: rpc_client }
+        Self { 
+            cp_finder: CpPoolFinder::new(rpc_client)
+        }
     }
 }
 
@@ -188,11 +189,10 @@ impl PoolFinder for StandardPoolFinder {
         token_a: Pubkey,
         token_b: Pubkey,
     ) -> SwapResult<Vec<PoolInfo>> {
-        debug!("Searching for Standard pools for {}/{}", token_a, token_b);
+        debug!("Searching for Standard (CP) pools for {}/{}", token_a, token_b);
         
-        // TODO: Implement standard pool discovery
-        
-        Ok(vec![])
+        // Standard pools are actually CP pools
+        self.cp_finder.find_pools(token_a, token_b).await
     }
 }
 

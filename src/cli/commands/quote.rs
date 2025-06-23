@@ -41,10 +41,11 @@ pub async fn execute(args: QuoteArgs) -> SwapResult<()> {
     }
 
     // Convert amount to smallest units based on token decimals
-    // For now, assume 6 decimals for pump tokens, 9 for SOL
-    // TODO: Get actual decimals from token metadata
-    let decimals = if args.token_in == sol_mint { 9 } else { 6 };
-    let amount_in = (args.amount * 10f64.powi(decimals)) as u64;
+    let decimals = crate::core::get_token_decimals(
+        &solana_client::rpc_client::RpcClient::new(config.rpc_url.clone()),
+        &args.token_in
+    )?;
+    let amount_in = (args.amount * 10f64.powi(decimals as i32)) as u64;
 
     let request = QuoteRequest {
         token_in: args.token_in,

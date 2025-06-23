@@ -1,6 +1,7 @@
 pub mod amm_swap;
 pub mod stable_swap;
 pub mod clmm_swap;
+pub mod cp_swap;
 pub mod monitor;
 pub mod wsol;
 pub mod alt;
@@ -31,7 +32,7 @@ use spl_associated_token_account::{get_associated_token_address, instruction::cr
 // Token-2022 program ID
 const TOKEN_2022_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
-pub use monitor::{TransactionMonitor, MonitorConfig, RetryConfig};
+pub use monitor::{TransactionMonitor, MonitorConfig, RetryConfig, BalanceChange};
 
 /// Transaction version preference
 #[derive(Debug, Clone, Copy)]
@@ -513,12 +514,21 @@ impl TransactionExecutor {
     }
 
     /// Build Standard swap instruction
-    async fn build_standard_swap_instruction(&self, _params: &SwapParams) -> SwapResult<Instruction> {
-        // TODO: Implement standard pool swap instruction
+    async fn build_standard_swap_instruction(&self, params: &SwapParams) -> SwapResult<Instruction> {
+        info!("Building Standard (CP) swap instruction for pool {}", params.quote.pool_info.address);
         
-        Err(SwapError::Other(
-            "Standard swap instruction building not yet implemented".to_string(),
-        ))
+        // Get pool account data
+        let pool_data = self.rpc_client
+            .get_account_data(&params.quote.pool_info.address)
+            .await?;
+        
+        // Build the swap instruction using CP swap builder
+        cp_swap::build_cp_swap_instruction(
+            params,
+            &self.keypair.pubkey(),
+            &crate::core::constants::RAYDIUM_CP_SWAP_PROGRAM,
+            &pool_data,
+        ).await
     }
 
     /// Get transaction with v0 support
@@ -642,27 +652,52 @@ impl TransactionExecutor {
     
     /// Parse swap amount from Raydium log messages
     fn parse_swap_amount_from_logs(&self, log: &str) -> Option<u64> {
-        // Raydium logs typically contain swap information in a structured format
-        // TODO: This is a simplified parser - need more robust parsing
+        // Raydium logs contain swap information in different formats for each pool type
         
-        if log.contains("swap_base_out:") {
-            // Try to extract base token output amount
-            if let Some(start) = log.find("swap_base_out:") {
-                let remaining = &log[start + "swap_base_out:".len()..];
-                if let Some(end) = remaining.find(',').or(remaining.find(' ')) {
-                    let amount_str = remaining[..end].trim();
-                    return amount_str.parse::<u64>().ok();
+        // AMM pool logs format: "ray_log: ... swap_base_out:123456, swap_quote_out:789012"
+        if log.contains("swap_base_out:") || log.contains("swap_quote_out:") {
+            for pattern in ["swap_base_out:", "swap_quote_out:"] {
+                if let Some(start) = log.find(pattern) {
+                    let remaining = &log[start + pattern.len()..];
+                    // Find the number - it ends at comma, space, or end of string
+                    let end = remaining.find(|c: char| !c.is_numeric())
+                        .unwrap_or(remaining.len());
+                    if let Ok(amount) = remaining[..end].trim().parse::<u64>() {
+                        if amount > 0 {
+                            debug!("Parsed {} amount: {}", pattern, amount);
+                            return Some(amount);
+                        }
+                    }
                 }
             }
         }
         
-        if log.contains("swap_quote_out:") {
-            // Try to extract quote token output amount
-            if let Some(start) = log.find("swap_quote_out:") {
-                let remaining = &log[start + "swap_quote_out:".len()..];
-                if let Some(end) = remaining.find(',').or(remaining.find(' ')) {
-                    let amount_str = remaining[..end].trim();
-                    return amount_str.parse::<u64>().ok();
+        // CLMM pool logs format: "amount_0:123456, amount_1:789012"
+        if log.contains("amount_0:") || log.contains("amount_1:") {
+            for pattern in ["amount_0:", "amount_1:"] {
+                if let Some(start) = log.find(pattern) {
+                    let remaining = &log[start + pattern.len()..];
+                    let end = remaining.find(|c: char| !c.is_numeric())
+                        .unwrap_or(remaining.len());
+                    if let Ok(amount) = remaining[..end].trim().parse::<u64>() {
+                        if amount > 0 {
+                            debug!("Parsed CLMM {} amount: {}", pattern, amount);
+                            return Some(amount);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Stable pool logs format: "amount_out:123456"
+        if log.contains("amount_out:") {
+            if let Some(start) = log.find("amount_out:") {
+                let remaining = &log[start + "amount_out:".len()..];
+                let end = remaining.find(|c: char| !c.is_numeric())
+                    .unwrap_or(remaining.len());
+                if let Ok(amount) = remaining[..end].trim().parse::<u64>() {
+                    debug!("Parsed Stable amount_out: {}", amount);
+                    return Some(amount);
                 }
             }
         }

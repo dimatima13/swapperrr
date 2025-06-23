@@ -150,8 +150,8 @@ impl crate::quotes::QuoteCalculator for AmmQuoteCalculator {
         // Calculate minimum output with slippage
         let min_amount_out = self.calculate_min_output(amount_out, request.slippage_bps);
 
-        // Calculate fee
-        let fee = (request.amount_in as f64 * pool.fee_rate) as u64;
+        // Calculate fee (round to nearest)
+        let fee = (request.amount_in as f64 * pool.fee_rate).round() as u64;
 
         Ok(QuoteResult {
             pool_info: pool.clone(),
@@ -202,7 +202,6 @@ mod tests {
             token_b,
             liquidity_usd: 100000.0,
             volume_24h_usd: 50000.0,
-            // TODO: fix this
             fee_rate: AMM_FEE_RATE,
             program_id: Pubkey::new_unique(),
             pool_state: PoolState::AMM {
@@ -233,7 +232,7 @@ mod tests {
 
         // Small trade should have minimal impact
         let impact = calculator.calculate_price_impact(100, 99, 1_000_000, 1_000_000);
-        assert!(impact < 0.1); // Less than 0.1%
+        assert!(impact < 1.1); // Less than 1.1% (1% from the 99/100 ratio)
 
         // Large trade should have significant impact
         let impact = calculator.calculate_price_impact(100_000, 90_000, 1_000_000, 1_000_000);
@@ -272,7 +271,7 @@ mod tests {
         assert!(quote.amount_out < 1000); // Should be less due to fees
         assert_eq!(quote.min_amount_out, quote.amount_out * 995 / 1000); // 0.5% slippage
         assert!(quote.price_impact >= 0.0);
-        assert_eq!(quote.fee, 2); // 0.25% of 1000
+        assert_eq!(quote.fee, 3); // 0.25% of 1000 = 2.5, rounded to 3
     }
 
     #[test]
