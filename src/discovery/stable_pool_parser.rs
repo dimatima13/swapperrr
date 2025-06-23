@@ -1,6 +1,6 @@
 use crate::core::{
     constants::*, layouts::StablePoolState, PoolInfo, PoolState, PoolType, SwapError, SwapResult,
-    TokenInfo, OnchainPriceCalculator,
+    TokenInfo,
 };
 use borsh::BorshDeserialize;
 use log::{debug, warn};
@@ -312,47 +312,37 @@ impl StablePoolParser {
         token_a: &TokenInfo,
         token_b: &TokenInfo,
     ) -> f64 {
-        use std::collections::HashMap;
+        // For stable pools, we can make reasonable assumptions:
+        // 1. If both tokens are stablecoins, liquidity = sum of reserves
+        // 2. If one token is a stablecoin, we can derive the other token's implied price
+        // 3. Otherwise, we return a conservative estimate
         
-        // Create a temporary pool info to use with price calculator
-        let temp_pool = PoolInfo {
-            pool_type: PoolType::Stable,
-            address: Pubkey::default(),
-            token_a: token_a.clone(),
-            token_b: token_b.clone(),
-            liquidity_usd: 0.0,
-            volume_24h_usd: 0.0,
-            fee_rate: 0.0,
-            program_id: *STABLE_PROGRAM,
-            pool_state: PoolState::Stable {
-                reserves: vec![reserve_a, reserve_b],
-                amp_factor: 1,
-            },
-        };
+        let amount_a = reserve_a as f64 / 10f64.powi(token_a.decimals as i32);
+        let amount_b = reserve_b as f64 / 10f64.powi(token_b.decimals as i32);
         
-        // Use hardcoded prices for common tokens as fallback
-        let mut token_prices = HashMap::new();
+        // Check if tokens are known stablecoins
+        let is_stable_a = matches!(token_a.symbol.as_str(), "USDC" | "USDT" | "USDH" | "USDD" | "UXD");
+        let is_stable_b = matches!(token_b.symbol.as_str(), "USDC" | "USDT" | "USDH" | "USDD" | "UXD");
         
-        // Stablecoins
-        token_prices.insert(token_a.mint, match token_a.symbol.as_str() {
-            "USDC" | "USDT" | "USDH" => 1.0,
-            "SOL" => 140.0,  // Updated to more recent price
-            "mSOL" => 147.0,  // Slightly higher than SOL
-            "ETH" => 3000.0,
-            "BTC" => 65000.0,
-            _ => 0.0,
-        });
-        
-        token_prices.insert(token_b.mint, match token_b.symbol.as_str() {
-            "USDC" | "USDT" | "USDH" => 1.0,
-            "SOL" => 140.0,
-            "mSOL" => 147.0,
-            "ETH" => 3000.0,
-            "BTC" => 65000.0,
-            _ => 0.0,
-        });
-        
-        // Calculate liquidity using price calculator
-        OnchainPriceCalculator::estimate_pool_liquidity_usd(&temp_pool, &token_prices)
+        if is_stable_a && is_stable_b {
+            // Both stablecoins - liquidity is simply sum of amounts
+            amount_a + amount_b
+        } else if is_stable_a {
+            // Token A is stable, derive token B price from pool ratio
+            // In a stable pool with high amp, price ratio should be close to reserve ratio
+            amount_a * 2.0 // Conservative estimate: assume symmetric liquidity
+        } else if is_stable_b {
+            // Token B is stable, derive token A price from pool ratio
+            amount_b * 2.0 // Conservative estimate: assume symmetric liquidity
+        } else {
+            // Neither is a stablecoin - use conservative estimate based on pool size
+            // For stable pools, tokens are usually correlated (e.g., SOL/mSOL, ETH/stETH)
+            // We can't determine USD value without external reference
+            let total_units = amount_a + amount_b;
+            
+            // Return a conservative non-zero estimate to allow pool ranking
+            // Actual USD value will be determined when we have more pool data
+            total_units * 0.1 // Very conservative multiplier
+        }
     }
 }

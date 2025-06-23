@@ -1,6 +1,6 @@
 use crate::core::{SwapError, SwapParams, SwapResult};
 use borsh::{BorshDeserialize, BorshSerialize};
-use log::{debug, info};
+use log::info;
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
@@ -60,7 +60,7 @@ pub async fn build_cp_swap_instruction(
     info!("Pool token mints - 0: {}, 1: {}", pool_state.token_0_mint, pool_state.token_1_mint);
     
     // Determine swap direction
-    let (is_base_input, token_0_to_1) = if params.token_in == pool_state.token_0_mint {
+    let (_, token_0_to_1) = if params.token_in == pool_state.token_0_mint {
         (true, true)
     } else if params.token_in == pool_state.token_1_mint {
         (true, false)

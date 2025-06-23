@@ -1,10 +1,10 @@
-use crate::core::{PoolInfo, PoolState, SwapResult};
+use crate::core::{PoolInfo, PoolState};
 use log::debug;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-/// Known stable coin mints
+// Known stable coin mints
 lazy_static::lazy_static! {
     static ref STABLE_COINS: HashMap<Pubkey, f64> = {
         let mut m = HashMap::new();
@@ -234,7 +234,7 @@ impl OnchainPriceCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{PoolType, TokenInfo};
+    use crate::core::TokenInfo;
     
     #[test]
     fn test_stablecoin_price() {

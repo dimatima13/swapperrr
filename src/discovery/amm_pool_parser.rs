@@ -430,7 +430,7 @@ impl AmmPoolParser {
         }
     }
 
-    /// Estimate liquidity in USD (simplified)
+    /// Estimate liquidity in USD
     fn estimate_liquidity_usd(
         &self,
         reserve_a: u64,
@@ -438,24 +438,33 @@ impl AmmPoolParser {
         token_a: &TokenInfo,
         token_b: &TokenInfo,
     ) -> f64 {
-        // In production, use price oracle
-        // For now, use simple heuristics
+        // For AMM pools, derive price from reserves when one token is a stablecoin
+        let amount_a = reserve_a as f64 / 10f64.powi(token_a.decimals as i32);
+        let amount_b = reserve_b as f64 / 10f64.powi(token_b.decimals as i32);
         
-        let value_a = match token_a.symbol.as_str() {
-            "SOL" => (reserve_a as f64 / 10f64.powi(token_a.decimals as i32)) * 140.0, // Updated to ~$140
-            "USDC" | "USDT" => reserve_a as f64 / 10f64.powi(token_a.decimals as i32),
-            "BONK" => (reserve_a as f64 / 10f64.powi(token_a.decimals as i32)) * 0.00002,
-            _ => 0.0,
-        };
-
-        let value_b = match token_b.symbol.as_str() {
-            "SOL" => (reserve_b as f64 / 10f64.powi(token_b.decimals as i32)) * 140.0, // Updated to ~$140
-            "USDC" | "USDT" => reserve_b as f64 / 10f64.powi(token_b.decimals as i32),
-            "BONK" => (reserve_b as f64 / 10f64.powi(token_b.decimals as i32)) * 0.00002,
-            _ => 0.0,
-        };
-
-        value_a + value_b
+        // Check if tokens are stablecoins
+        let is_stable_a = matches!(token_a.symbol.as_str(), "USDC" | "USDT" | "USDH" | "USDD" | "UXD");
+        let is_stable_b = matches!(token_b.symbol.as_str(), "USDC" | "USDT" | "USDH" | "USDD" | "UXD");
+        
+        if is_stable_a && is_stable_b {
+            // Both stablecoins
+            amount_a + amount_b
+        } else if is_stable_a {
+            // Token A is stable, derive token B price from AMM formula
+            // Price of B in terms of A = reserve_a / reserve_b
+            let price_b_in_usd = amount_a / amount_b;
+            amount_a + (amount_b * price_b_in_usd)
+        } else if is_stable_b {
+            // Token B is stable, derive token A price from AMM formula
+            // Price of A in terms of B = reserve_b / reserve_a
+            let price_a_in_usd = amount_b / amount_a;
+            (amount_a * price_a_in_usd) + amount_b
+        } else {
+            // Neither is a stablecoin
+            // For ranking purposes, use the geometric mean of reserves as a proxy
+            // This gives us a relative measure of pool size
+            2.0 * (amount_a * amount_b).sqrt()
+        }
     }
     
     /// Get AMM vault addresses using PDA
